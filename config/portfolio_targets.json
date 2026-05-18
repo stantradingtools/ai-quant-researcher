@@ -1,0 +1,13 @@
+{
+  "_description": "Portfolio Greek limits for /portfolio-greeks check. Memory subagent flags 'NOT NEUTRAL' if any limit is breached. Edit values to match your tolerance.",
+  "max_abs_delta": 50.0,
+  "max_abs_gamma": 5.0,
+  "max_abs_vega": 2000.0,
+  "max_abs_theta": 200.0,
+  "_units": {
+    "delta": "share-equivalent",
+    "gamma": "delta change per $1 underlying move",
+    "vega": "$ per 1% IV change",
+    "theta": "$ per calendar day"
+  }
+}
