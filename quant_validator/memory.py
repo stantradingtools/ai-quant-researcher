@@ -193,9 +193,17 @@ def n_trials(conn: sqlite3.Connection) -> int:
 
 
 def accepted_returns(conn: sqlite3.Connection) -> list[pd.Series]:
-    """All accepted return series for the correlation gate."""
+    """All accepted, NON-RETIRED return series for the correlation gate.
+
+    Retired strategies are decommissioned — they must not gate new candidates.
+    A successor strategy (e.g. a bug-fixed replacement) should not be blocked
+    by correlating with the version it replaces once that version is retired.
+    """
     rows = conn.execute(
-        "SELECT hypothesis_id, returns_json FROM trials WHERE accepted = 1 ORDER BY id"
+        "SELECT hypothesis_id, returns_json FROM trials "
+        "WHERE accepted = 1 "
+        "AND (deployment_status IS NULL OR deployment_status != 'retired') "
+        "ORDER BY id"
     ).fetchall()
     out = []
     for row in rows:
