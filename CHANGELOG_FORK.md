@@ -2,6 +2,33 @@
 
 Changes layered on top of upstream `zostaff/ai-quant-researcher`.
 
+## v0.3 — Vs. Random gate + live-testing fixes (May 2026)
+
+Added after live-testing v0.2 surfaced 5 spec issues and a request to add
+the Woodriff/BuildAlpha Vs. Random robustness test. Full detail in
+PATCH_NOTES_v0.3.md. Verification suite expanded 12 → 16 tests.
+
+- NEW `quant_validator/vs_random.py` — Vs. Random gate (Step 6.5). Tier A
+  permutation test fully implemented (always runs, Mode A + B). Tier B
+  constraint-matched random rule search scaffolded with skew_consensus
+  rule grammar. Tier C block-bootstrap scaffolded.
+- NEW `quant_validator/stats.py` — Step 6 stats CLI (Sharpe/Sortino/Calmar/
+  drawdown/moments, DSR, k-fold walk-forward). Was referenced by orchestrator
+  but never existed.
+- NEW `quant_validator/gates.py` — Step 8 gates CLI (deflated_sharpe,
+  correlation, pca_concentration, vs_random). Was referenced but never existed.
+- FIX memory.py — apply_override now inserts a placeholder row pre-Step-10
+  (deployment_status='override_pending'); record_trial upserts + merges
+  override_log at Step 10 instead of inserting a duplicate.
+- FIX adapters (massive/alpha_vantage/flash_alpha/orats) — raise
+  NotImplementedError first with honest stub message, before the key check.
+- FIX hypothesis-refiner.md — market_type is the TRADED INSTRUMENT, not the
+  signal source; "skew/vol/gamma" in prose are signal names and don't imply
+  options or cross-sectional.
+- WIRING — validate-thesis.md Step 6.5; override-reject.md vs_random
+  overridable with resume map; critic-validator.md reads vs_random.json.
+- Version bump 0.1.0 → 0.3.0.
+
 ## v0.1 — Initial overlay (May 2026)
 
 ### Subagent architecture (.claude/agents/)

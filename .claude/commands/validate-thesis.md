@@ -154,6 +154,37 @@ applicable. Writes results/metrics.json, results/walk_forward.json,
 results/dsr.json.
 
 ═══════════════════════════════════════════════════════════════
+STEP 6.5 — Vs. Random gate (always)
+
+Run via Bash:
+  python -m quant_validator.vs_random run --thesis_id <thesis_id>
+
+Writes results/vs_random.json. Tier A (permutation) always runs and is the
+hard floor: it randomizes position TIMING under the same activity rate and
+magnitude, holding asset returns fixed, and checks whether the strategy's
+Sharpe beats the 95th percentile of random-timing Sharpes.
+
+This is the Woodriff/BuildAlpha "Vs. Random" test promoted to a first-class
+gate (previously critic-validator ran a placebo ad hoc only when critic-pre
+flagged it). Tier B (constraint-matched random rule search) runs in Mode A
+when a feature matrix + backtest fn are available; in Mode B it records
+"not_available" rather than silently skipping.
+
+Print the Step 6.5 summary block with: actual Sharpe, random p95, percentile,
+and Tier A verdict (pass / borderline / fail).
+
+CHECKPOINT: Tier A verdict drives behavior:
+- "pass"       → continue
+- "borderline" → continue but attach a warning to the decision record
+- "fail"       → this is a soft-overridable rejection. Print:
+    "Vs. Random Tier A FAILED: actual Sharpe <x> is below the 95th
+     percentile of random-timing strategies (<p95>). The entry timing
+     shows no demonstrable edge over luck.
+     To override: /override-reject <thesis_id> vs_random --reason '...'
+     To abort: do nothing."
+  Run Step 11 with rejection_reason="vs_random" then STOP.
+
+═══════════════════════════════════════════════════════════════
 STEP 7 — Critic-validator (always)
 
 Invoke critic-validator subagent. Reads refined.json, code/, results/.

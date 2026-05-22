@@ -15,6 +15,16 @@ Read these files for the current thesis:
 - theses/<thesis_id>/results/greeks.csv  (if options thesis)
 - theses/<thesis_id>/results/walk_forward.json  (if computed)
 - theses/<thesis_id>/results/dsr.json  (if computed)
+- theses/<thesis_id>/results/vs_random.json  (Step 6.5 — formal Vs. Random gate)
+
+NOTE (v0.3): the placebo / Vs. Random test is now a first-class pipeline
+gate (Step 6.5, results/vs_random.json), not something you run ad hoc.
+READ vs_random.json and incorporate its Tier A verdict into your reasoning,
+but do NOT re-run the permutation yourself. If vs_random.json shows a
+"borderline" or "fail" Tier A verdict, weight that heavily in criterion 8
+(regime/edge-attribution) commentary. You may still run ADDITIONAL bespoke
+checks with Bash if the thesis warrants, but the standard timing-edge test
+is already done for you.
 
 Walk these 9 criteria in order. For each, output one of:
 - "pass"     — criterion clearly satisfied

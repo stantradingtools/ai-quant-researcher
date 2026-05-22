@@ -35,30 +35,34 @@ FLASH_BASE = "https://lab.flashalpha.com/api"  # confirm
 
 def fetch_exposure_summary(symbol: str, start: str, end: str) -> pd.DataFrame:
     """Daily net GEX/DEX/VEX/CHEX + gamma regime."""
-    if not FLASH_API_KEY:
-        raise RuntimeError("FLASH_API_KEY not set in .env")
-    raise NotImplementedError("flash_alpha.fetch_exposure_summary: Phase 1 pending")
+    raise NotImplementedError(
+        "flash_alpha.fetch_exposure_summary: Phase 1 pending "
+        "(Stub — even with FLASH_API_KEY set, fetch logic is not yet implemented.)"
+    )
 
 
 def fetch_levels(symbol: str, start: str, end: str) -> pd.DataFrame:
     """Key options levels per day: gamma flip, call/put walls, max-OI, 0DTE pivot."""
-    if not FLASH_API_KEY:
-        raise RuntimeError("FLASH_API_KEY not set in .env")
-    raise NotImplementedError("flash_alpha.fetch_levels: Phase 1 pending")
+    raise NotImplementedError(
+        "flash_alpha.fetch_levels: Phase 1 pending "
+        "(Stub — even with FLASH_API_KEY set, fetch logic is not yet implemented.)"
+    )
 
 
 def fetch_surface_snapshot(symbol: str, date: str) -> pd.DataFrame:
     """Single-day 50x50 IV surface grid."""
-    if not FLASH_API_KEY:
-        raise RuntimeError("FLASH_API_KEY not set in .env")
-    raise NotImplementedError("flash_alpha.fetch_surface_snapshot: Phase 1 pending")
+    raise NotImplementedError(
+        "flash_alpha.fetch_surface_snapshot: Phase 1 pending "
+        "(Stub — even with FLASH_API_KEY set, fetch logic is not yet implemented.)"
+    )
 
 
 def fetch_volatility(symbol: str, start: str, end: str) -> pd.DataFrame:
     """ATM IV, RV (5/10/20/30d), VRP, skew, term structure."""
-    if not FLASH_API_KEY:
-        raise RuntimeError("FLASH_API_KEY not set in .env")
-    raise NotImplementedError("flash_alpha.fetch_volatility: Phase 1 pending")
+    raise NotImplementedError(
+        "flash_alpha.fetch_volatility: Phase 1 pending "
+        "(Stub — even with FLASH_API_KEY set, fetch logic is not yet implemented.)"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

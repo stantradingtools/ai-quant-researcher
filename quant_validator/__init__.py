@@ -11,4 +11,4 @@ This package provides:
 Most modules are thin wrappers over ai_quant_lab.* with Stan-specific extensions.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"

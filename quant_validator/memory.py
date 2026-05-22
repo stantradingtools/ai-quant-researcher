@@ -353,6 +353,37 @@ def record_trial(
     override_log_json = json.dumps(override_log) if override_log else None
     n_at_time = n_trials(conn)
 
+    # BUGFIX (v0.3): if a placeholder row exists from a pre-Step-10 override
+    # (deployment_status='override_pending'), UPDATE it rather than inserting
+    # a duplicate, and merge its override_log with any passed in here.
+    existing_row = conn.execute(
+        "SELECT id, override_log_json, deployment_status FROM trials "
+        "WHERE hypothesis_id = ? ORDER BY id DESC LIMIT 1",
+        (thesis_id,),
+    ).fetchone()
+
+    if existing_row and existing_row["deployment_status"] == "override_pending":
+        prior_overrides = json.loads(existing_row["override_log_json"]) if existing_row["override_log_json"] else []
+        merged = prior_overrides + (override_log or [])
+        merged_json = json.dumps(merged) if merged else None
+        conn.execute(
+            """
+            UPDATE trials SET
+                hypothesis_text = ?, rationale = ?, code = ?, metrics_json = ?,
+                accepted = ?, rejection_reason = ?, returns_json = ?,
+                market_type = ?, deployment_status = ?, size_multiplier = ?,
+                override_log_json = ?
+            WHERE id = ?
+            """,
+            (
+                refined["title"], refined.get("rationale", ""), code, json.dumps(metrics),
+                int(accepted), rejection_reason, returns_json,
+                market_type, "archived", size_multiplier,
+                merged_json, existing_row["id"],
+            ),
+        )
+        return int(existing_row["id"])
+
     cursor = conn.execute(
         """
         INSERT INTO trials (
@@ -467,20 +498,57 @@ def apply_override(
     failure_key: str,
     reason: str,
 ) -> bool:
-    """Append an override entry to the trial's override_log_json."""
+    """Append an override entry to the trial's override_log_json.
+
+    BUGFIX (v0.3): if no trial row exists yet (override applied BEFORE
+    Step 10 memory_record runs — e.g. overriding critic_pre at Step 2),
+    insert a placeholder row so the override is never lost. Step 10's
+    record_trial later upserts onto this row, preserving the override_log.
+    Previously this returned False (silent no-op) and the override existed
+    only in decision.json, invisible to /memory-overrides audit queries.
+    """
     row = conn.execute(
         "SELECT id, override_log_json FROM trials WHERE hypothesis_id = ? ORDER BY id DESC LIMIT 1",
         (thesis_id,),
     ).fetchone()
-    if not row:
-        return False
 
-    existing = json.loads(row["override_log_json"]) if row["override_log_json"] else []
-    existing.append({
+    entry = {
         "failure": failure_key,
         "reason": reason,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-    })
+    }
+
+    if not row:
+        # No trial row yet — create a placeholder so the override is tracked.
+        # deployment_status='override_pending' marks it for Step 10 upsert.
+        n_at_time = n_trials(conn)
+        # Try to pull a human title from refined.json if present
+        title = thesis_id
+        try:
+            refined = json.loads(Path(f"theses/{thesis_id}/refined.json").read_text())
+            title = refined.get("title", thesis_id)
+        except Exception:
+            pass
+        conn.execute(
+            """
+            INSERT INTO trials (
+                hypothesis_id, hypothesis_text, rationale, code,
+                metrics_json, accepted, rejection_reason,
+                n_trials_at_time, iteration, returns_json, created_at,
+                market_type, deployment_status, size_multiplier, override_log_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                thesis_id, title, "override applied pre-validation", "",
+                "{}", 1, None,
+                n_at_time, 0, "", datetime.now(timezone.utc).isoformat(),
+                None, "override_pending", 1.0, json.dumps([entry]),
+            ),
+        )
+        return True
+
+    existing = json.loads(row["override_log_json"]) if row["override_log_json"] else []
+    existing.append(entry)
     conn.execute(
         "UPDATE trials SET override_log_json = ?, accepted = 1, rejection_reason = NULL WHERE id = ?",
         (json.dumps(existing), row["id"]),

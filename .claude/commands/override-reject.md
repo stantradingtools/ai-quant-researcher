@@ -11,7 +11,7 @@ ARGUMENTS: $ARGUMENTS
 Parse $ARGUMENTS into three components:
 1. thesis_id (first token)
 2. failure_key (second token — one of: critic_pre, critic_validator,
-   gates:deflated_sharpe, gates:correlation, gates:pca, risk)
+   gates:deflated_sharpe, gates:correlation, gates:pca, risk, vs_random)
 3. --reason "<text>" (everything after --reason flag)
 
 ═══════════════════════════════════════════════════════════════
@@ -33,6 +33,7 @@ STEP 2 — Check that the failure is overridable
 
 OVERRIDABLE failures (allow override to proceed):
 - critic_pre
+- vs_random
 - critic_validator
 - gates:deflated_sharpe
 - gates:correlation
@@ -84,6 +85,7 @@ STEP 4 — Resume the pipeline from the step AFTER the failure
 
 Determine the resume_step:
 - critic_pre failure (step 2)             → resume step 3
+- vs_random failure (step 6.5)            → resume step 7
 - critic_validator failure (step 7)       → resume step 8
 - gates:* failure (step 8)                → resume step 9
 - risk failure (step 9)                   → resume step 10

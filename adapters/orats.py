@@ -29,16 +29,18 @@ ORATS_BASE = "https://api.orats.io/datav2"
 
 def fetch_cores(symbol: str, start: str, end: str) -> pd.DataFrame:
     """EOD core option metrics: IVs by tenor, atm_skew, ivol_pct_rank etc."""
-    if not ORATS_KEY:
-        raise RuntimeError("ORATS_API_TOKEN not set in .env")
-    raise NotImplementedError("orats.fetch_cores: Phase 1 pending")
+    raise NotImplementedError(
+        "orats.fetch_cores: Phase 1 pending "
+        "(Stub — even with ORATS_KEY set, fetch logic is not yet implemented.)"
+    )
 
 
 def fetch_strikes(symbol: str, start: str, end: str) -> pd.DataFrame:
     """Per-strike daily option snapshots."""
-    if not ORATS_KEY:
-        raise RuntimeError("ORATS_API_TOKEN not set in .env")
-    raise NotImplementedError("orats.fetch_strikes: Phase 1 pending")
+    raise NotImplementedError(
+        "orats.fetch_strikes: Phase 1 pending "
+        "(Stub — even with ORATS_KEY set, fetch logic is not yet implemented.)"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

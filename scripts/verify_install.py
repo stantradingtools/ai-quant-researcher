@@ -289,6 +289,143 @@ def t_env_example():
     print("  .env.example has all 5 expected API key slots OK")
 
 
+# ─── v0.3 additions ───────────────────────────────────────────
+
+def t_vs_random_discriminates():
+    """Vs. Random Tier A must pass a real-edge series and not-pass a no-edge one."""
+    import numpy as np
+    import pandas as pd
+    from quant_validator.vs_random import vs_random_permutation
+
+    rng = np.random.default_rng(0)
+    dates = pd.date_range("2022-01-03", periods=600, freq="B")
+    asset = pd.Series(rng.normal(0.0003, 0.012, 600), index=dates)
+
+    # No-edge: random timing
+    pos_noedge = pd.Series(rng.choice([0, 0, 0.5, -0.5], 600), index=dates)
+    strat_noedge = (pos_noedge.shift(1) * asset).fillna(0)
+    r_noedge = vs_random_permutation(pos_noedge, strat_noedge, asset_returns=asset, n=500, seed=1)
+    assert r_noedge["verdict"] in ("fail", "borderline"), \
+        f"no-edge should not pass, got {r_noedge['verdict']}"
+
+    # Real edge: predictive timing
+    sig = np.sign(asset.shift(-1) + rng.normal(0, 0.02, 600)).fillna(0)
+    pos_edge = pd.Series((sig * 0.4).values, index=dates)
+    strat_edge = (pos_edge.shift(1) * asset).fillna(0)
+    r_edge = vs_random_permutation(pos_edge, strat_edge, asset_returns=asset, n=500, seed=1)
+    assert r_edge["verdict"] == "pass", f"real-edge should pass, got {r_edge['verdict']}"
+    print(f"  Tier A: no-edge={r_noedge['verdict']}, real-edge={r_edge['verdict']} OK")
+
+
+def t_stats_and_gates_cli():
+    """stats.compute and gates.evaluate must run end-to-end and produce JSON."""
+    import numpy as np
+    import pandas as pd
+    from quant_validator.stats import compute as stats_compute
+    from quant_validator.vs_random import run_vs_random
+    from quant_validator.gates import evaluate as gates_evaluate
+
+    tmpdir = Path(tempfile.mkdtemp())
+    cwd_before = os.getcwd()
+    os.chdir(tmpdir)
+    try:
+        tid = "verify_v03"
+        base = tmpdir / "theses" / tid / "results"
+        base.mkdir(parents=True)
+        rng = np.random.default_rng(3)
+        dates = pd.date_range("2022-01-03", periods=600, freq="B")
+        asset = pd.Series(rng.normal(0.0003, 0.012, 600), index=dates)
+        sig = np.sign(asset.shift(-1) + rng.normal(0, 0.02, 600)).fillna(0)
+        pos = pd.Series((sig * 0.4).values, index=dates)
+        strat = (pos.shift(1) * asset).fillna(0)
+        pos.to_csv(base / "positions.csv", header=["position"])
+        strat.to_csv(base / "returns.csv", header=["returns"])
+        asset.to_csv(base / "asset_returns.csv", header=["asset_return"])
+
+        s = stats_compute(Path(f"theses/{tid}"), n_trials=30)
+        assert s["status"] == "ok" and "dsr" in s
+        v = run_vs_random(Path(f"theses/{tid}"), n=400, seed=5)
+        assert v["status"] == "ok"
+        g = gates_evaluate(tid)
+        assert "vs_random" in g["gates"], "vs_random gate missing from gates output"
+        assert g["overall"] in ("pass", "warning", "fail")
+        print(f"  stats+vs_random+gates ran; gates overall={g['overall']}, "
+              f"vs_random gate present OK")
+    finally:
+        os.chdir(cwd_before)
+        shutil.rmtree(tmpdir)
+
+
+def t_override_upsert():
+    """apply_override pre-Step-10 must create a tracked row that record_trial upserts."""
+    import numpy as np
+    import pandas as pd
+    from quant_validator.memory import (
+        _connect, apply_override, record_trial, overrides_audit, status,
+    )
+    tmpdir = Path(tempfile.mkdtemp())
+    cwd_before = os.getcwd()
+    os.chdir(tmpdir)
+    try:
+        base = tmpdir / "theses" / "ov"
+        (base / "results").mkdir(parents=True)
+        (base / "refined.json").write_text(
+            '{"hypothesis_id":"ov","title":"OV","rationale":"t","market_type":"equities"}'
+        )
+        (base / "results" / "returns.csv").write_text("timestamp,returns\n2024-01-01,0.01\n2024-01-02,-0.01\n")
+        (base / "results" / "metrics.json").write_text('{"sharpe_ratio":1.0}')
+        (base / "decision.json").write_text('{"decision":"accepted_with_override","rejection_reason":null}')
+
+        db = tmpdir / "mem.db"
+        conn = _connect(db)
+        # override BEFORE record (Step 2 override scenario)
+        apply_override(conn, "ov", "critic_pre", "valid structural justification over twenty chars")
+        assert status(conn)["total_trials"] == 1, "override should create a tracked row"
+        assert len(overrides_audit(conn)) == 1, "override should be visible in audit"
+        # Step 10 record — should UPSERT, not duplicate
+        record_trial(conn, thesis_id="ov", accepted=True, size_multiplier=0.5)
+        st = status(conn)
+        assert st["total_trials"] == 1, f"record_trial should upsert, got {st['total_trials']} rows"
+        assert len(overrides_audit(conn)) == 1, "override must survive the upsert"
+        conn.close()
+        print("  override pre-Step-10 tracked + upserted by record_trial OK")
+    finally:
+        os.chdir(cwd_before)
+        shutil.rmtree(tmpdir)
+
+
+def t_adapter_stub_messaging():
+    """Stub adapters must raise NotImplementedError (not a misleading key error)."""
+    import importlib
+    saved = {}
+    for k in ["AV_API_KEY", "ALPHA_VANTAGE_API_KEY", "MASSIVE_API_KEY",
+              "FLASH_ALPHA_API_KEY", "FLASH_API_KEY", "ORATS_API_TOKEN", "ORATS_API_KEY"]:
+        saved[k] = os.environ.pop(k, None)
+    try:
+        from adapters import alpha_vantage, massive, flash_alpha, orats
+        for mod in (alpha_vantage, massive, flash_alpha, orats):
+            importlib.reload(mod)
+        checks = [
+            (alpha_vantage.fetch_bars, (["SPY"], "2024-01-01", "2024-12-31")),
+            (massive.fetch_bars, (["SPY"], "2024-01-01", "2024-12-31")),
+            (flash_alpha.fetch_exposure_summary, ("SPY", "2024-01-01", "2024-12-31")),
+            (orats.fetch_cores, ("SPY", "2024-01-01", "2024-12-31")),
+        ]
+        for fn, args in checks:
+            try:
+                fn(*args)
+                raise AssertionError(f"{fn.__name__} should have raised")
+            except NotImplementedError:
+                pass  # correct
+            except RuntimeError as e:
+                raise AssertionError(f"{fn.__name__} raised misleading RuntimeError: {e}")
+        print("  4 stub adapters raise NotImplementedError first OK")
+    finally:
+        for k, v in saved.items():
+            if v is not None:
+                os.environ[k] = v
+
+
 # ═══════════════════════════════════════════════════════════════
 # Main
 
@@ -310,6 +447,10 @@ def main() -> int:
     test("Deribit live ping (free API, requires internet)", t_deribit_live)
     test("Config files present and parseable", t_configs)
     test(".env.example present with expected keys", t_env_example)
+    test("v0.3 — Vs. Random Tier A discriminates edge", t_vs_random_discriminates)
+    test("v0.3 — stats + vs_random + gates CLI end-to-end", t_stats_and_gates_cli)
+    test("v0.3 — override upsert (pre-Step-10 tracking)", t_override_upsert)
+    test("v0.3 — adapter stubs raise NotImplementedError first", t_adapter_stub_messaging)
 
     print("\n" + "=" * 60)
     print("SUMMARY")

@@ -24,27 +24,28 @@ AV_BASE = "https://www.alphavantage.co/query"
 
 def fetch_bars(symbols: list[str], start: str, end: str, interval: str = "1d") -> pd.DataFrame:
     """Returns OHLCV in same schema as adapters.massive.fetch_bars."""
-    if not AV_API_KEY:
-        raise RuntimeError("AV_API_KEY not set in .env")
-    # TODO Phase 1: TIME_SERIES_DAILY_ADJUSTED for daily, TIME_SERIES_INTRADAY for intraday
-    raise NotImplementedError("alpha_vantage.fetch_bars: Phase 1 pending")
+    raise NotImplementedError(
+        "alpha_vantage.fetch_bars: Phase 1 pending "
+        "(Stub — even with AV_API_KEY set, fetch logic is not yet implemented.)"
+    )
 
 
 def fetch_options_chain(symbol: str, date: str | None = None) -> pd.DataFrame:
     """Returns option chain snapshot. Columns: expiry, strike, type,
        bid, ask, mark, iv, delta, gamma, theta, vega, open_interest, volume.
     """
-    if not AV_API_KEY:
-        raise RuntimeError("AV_API_KEY not set in .env")
-    # TODO Phase 2: REALTIME_OPTIONS endpoint
-    raise NotImplementedError("alpha_vantage.fetch_options_chain: Phase 2 pending")
+    raise NotImplementedError(
+        "alpha_vantage.fetch_options_chain: Phase 2 pending "
+        "(Stub — even with AV_API_KEY set, fetch logic is not yet implemented.)"
+    )
 
 
 def fetch_earnings_calendar(symbol: str | None = None) -> pd.DataFrame:
     """Earnings dates. Used by adapters.event_calendar.get_earnings_dates."""
-    if not AV_API_KEY:
-        raise RuntimeError("AV_API_KEY not set in .env")
-    raise NotImplementedError("alpha_vantage.fetch_earnings_calendar: Phase 2 pending")
+    raise NotImplementedError(
+        "alpha_vantage.fetch_earnings_calendar: Phase 2 pending "
+        "(Stub — even with AV_API_KEY set, fetch logic is not yet implemented.)"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

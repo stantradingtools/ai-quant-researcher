@@ -80,5 +80,20 @@ Rules:
 - Both works_in_regime AND breaks_in_regime fields are mandatory. Forcing this
   is the single most valuable disciplinary check.
 
+CRITICAL — market_type is the TRADED INSTRUMENT, not the signal source
+(v0.3 fix): Classify market_type by WHAT THE STRATEGY BUYS AND SELLS, never
+by the names of the features used to generate signals. A strategy that uses
+skew, IV, VRP, GEX, or any option-derived feature to decide when to buy or
+short the UNDERLYING STOCK is market_type="equities", NOT "options". Only
+classify market_type="options" when the strategy actually holds option
+positions (the P/L comes from option contracts). Likewise, "skew" /
+"vol" / "gamma" in the thesis prose are signal names and do NOT imply
+options trading or cross-sectional ranking. When unsure whether the
+instrument is the option or the underlying, ASK the user one question
+rather than guessing from feature names. Similarly, only mark
+mode="cross_sectional" if the strategy RANKS tickers against each other
+each bar; a strategy that applies a signal independently per ticker is
+mode="single" even if it trades many tickers.
+
 Write the result to theses/<thesis_id>/refined.json.
 Write a one-paragraph human summary to theses/<thesis_id>/step_summaries/01_refiner.md.

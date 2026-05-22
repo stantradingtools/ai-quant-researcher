@@ -35,17 +35,18 @@ def fetch_bars(
        MultiIndex on [timestamp, symbol].
        Point-in-time guaranteed: no later restatements applied.
     """
-    if not MASSIVE_API_KEY:
-        raise RuntimeError("MASSIVE_API_KEY not set in .env")
-    # TODO Phase 1: implement REST client + caching to Parquet
-    raise NotImplementedError("massive.fetch_bars: Phase 1 implementation pending")
+    raise NotImplementedError(
+        "massive.fetch_bars: Phase 1 implementation pending "
+        "(Stub — even with MASSIVE_API_KEY set, fetch logic is not yet implemented.)"
+    )
 
 
 def fetch_quote_snapshot(symbols: list[str]) -> pd.DataFrame:
     """Current bid/ask/last snapshot for live trading context."""
-    if not MASSIVE_API_KEY:
-        raise RuntimeError("MASSIVE_API_KEY not set in .env")
-    raise NotImplementedError("massive.fetch_quote_snapshot: Phase 1 pending")
+    raise NotImplementedError(
+        "massive.fetch_quote_snapshot: Phase 1 pending "
+        "(Stub — even with MASSIVE_API_KEY set, fetch logic is not yet implemented.)"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
