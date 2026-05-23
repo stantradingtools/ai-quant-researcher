@@ -20,7 +20,9 @@ IV in PERCENTAGE POINTS, e.g. 22.9, so NO blanket *100 — see _vp normalizer):
     putP/callP/rrP = 252d mid-rank rolling percentile (0-100)
     ivP     = ORATS ivPct1y (/hist/ivrank), local 252d pctl fallback
     skewDelta = skew[t] - skew[t-5]
-    sigma   = (ac[t]-ac[t-5]) / (ac[t]*hv20*sqrt(5/252))
+    sigma   = round( (ac[t]-ac[t-5]) / (ac[t]*hv20*sqrt(5/252)), 3 )
+              hv20 = annualized stdev of 20 log-returns STRICTLY PRIOR to t
+              (population/ddof=0); tool-exact (source lines 1416-1432)
 
 Auth: ORATS_API_TOKEN (or ORATS_API_KEY) in .env.
 Base: https://api.orats.io/datav2  (JSON default; append .csv for CSV)
@@ -317,7 +319,7 @@ def build_signal_frame(ticker: str, lookback: int = 252) -> pd.DataFrame:
     m["putRaw"] = p25 - atm
     m["skew"] = m["putRaw"] - m["callRaw"]
     m["rr"] = m["callRaw"] - m["putRaw"]
-    m["skewDelta"] = m["skew"] - m["skew"].shift(5)
+    m["skewDelta"] = (m["skew"] - m["skew"].shift(5)).round(2)  # tool .toFixed(2)
 
     # Rolling percentile matching the tool's rollingPercentile() EXACTLY:
     #   for bar i, window = the `lookback` values STRICTLY BEFORE i (not incl. i),
@@ -365,9 +367,13 @@ def build_signal_frame(ticker: str, lookback: int = 252) -> pd.DataFrame:
     # sigma: 5-day move normalized by 20d historical vol scaled to 5d horizon
     ac = m["clsPx"].astype(float)
     logret = np.log(ac / ac.shift(1))
-    hv20 = logret.rolling(20).std() * np.sqrt(252)
+    # Match the tool's sigma EXACTLY (source lines 1416-1432): population variance
+    # (ddof=0), 20d window STRICTLY PRIOR to today (.shift(1) drops today's return),
+    # tolerate up to 2 missing returns (min_periods=18), sigma rounded to 3 dp.
+    hv20 = (logret.rolling(20, min_periods=18).std(ddof=0) * np.sqrt(252)).shift(1)
     m["hv20"] = hv20
-    m["sigma"] = (ac - ac.shift(5)) / (ac * hv20 * np.sqrt(5 / 252))
+    sigma = (ac - ac.shift(5)) / (ac * hv20 * np.sqrt(5 / 252))
+    m["sigma"] = sigma.where(np.isfinite(sigma)).round(3)
 
     return m.reset_index()
 
@@ -482,10 +488,12 @@ def build_universe_signal(cache_dir: Path | None = None, lookback: int = 252,
         ac = g["clsPx"].astype("float64").to_numpy()
         with np.errstate(divide="ignore", invalid="ignore"):
             logret = np.diff(np.log(np.where(ac > 0, ac, np.nan)), prepend=np.nan)
-        hv20 = pd.Series(logret).rolling(20).std().to_numpy() * np.sqrt(252)
+        hv20 = (pd.Series(logret).rolling(20, min_periods=18).std(ddof=0)
+                .shift(1).to_numpy() * np.sqrt(252))  # tool-exact: pop var, strictly-prior 20d
         with np.errstate(invalid="ignore", divide="ignore"):
             sigma = (ac - np.concatenate([[np.nan] * 5, ac[:-5]])) / (ac * hv20 * np.sqrt(5 / 252))
         sigma[~np.isfinite(sigma)] = np.nan  # hv20==0 (no vol) -> inf -> NaN
+        sigma = np.round(sigma, 3)  # tool .toFixed(3)
         orats_iv = (pd.to_numeric(g["ivPct1y"], errors="coerce").to_numpy()
                     if "ivPct1y" in g.columns else np.full(len(g), np.nan))
         ivP = np.where(~np.isnan(orats_iv), orats_iv, roll_pct_vec(atm, lookback))
@@ -493,7 +501,7 @@ def build_universe_signal(cache_dir: Path | None = None, lookback: int = 252,
             "ticker": str(tk), "tradeDate": g["tradeDate"].to_numpy(),
             "clsPx": ac, "atmIV": atm, "callRaw": callRaw, "putRaw": putRaw,
             "skew": skew, "rr": rr,
-            "skewDelta": skew - np.concatenate([[np.nan] * 5, skew[:-5]]),
+            "skewDelta": np.round(skew - np.concatenate([[np.nan] * 5, skew[:-5]]), 2),
             "putP": roll_pct_vec(putRaw, lookback),
             "callP": roll_pct_vec(callRaw, lookback),
             "rrP": roll_pct_vec(rr, lookback),
