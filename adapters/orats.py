@@ -385,20 +385,43 @@ def build_universe_signal(cache_dir: Path | None = None, lookback: int = 252,
     """
     cache_dir = Path(cache_dir) if cache_dir else CACHE_DIR
 
+    import gc
+    import pyarrow as pa
+    import pyarrow.dataset as pads
+    import pyarrow.parquet as pq
+
     def _load(name: str, cols: list[str]) -> pd.DataFrame:
         d = cache_dir / name
-        files = sorted(d.glob("*.parquet"))
+        # Use ONLY the by-date universe files (YYYY-MM-DD.parquet). EXCLUDE stale
+        # per-ticker cache files (e.g. AAPL.parquet) left over from single-ticker
+        # parity/validation runs: globbing those would inject duplicate (2011+) and
+        # extra pre-2011 rows for those tickers and corrupt their percentile series.
+        # Also skip empty holiday markers (0 rows) so the Arrow schema unifies.
+        files = []
+        for f in sorted(d.glob("*.parquet")):
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", f.stem):
+                continue  # not a by-date file (ticker cache, strikes, etc.)
+            try:
+                if pq.read_metadata(f).num_rows == 0:
+                    continue  # non-trading-day marker
+            except Exception:
+                continue
+            files.append(str(f))
         if not files:
             raise FileNotFoundError(
-                f"No cached files in {d} — run `backfill` first (or pass cache_dir).")
-        frames = []
-        for f in files:
-            df = pd.read_parquet(f)
-            keep = [c for c in cols if c in df.columns]
-            if df.empty or "ticker" not in df.columns:
-                continue
-            frames.append(df[keep])
-        return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=cols)
+                f"No by-date cache files in {d} — run `backfill` first (or pass cache_dir).")
+        # Read all by-date files as ONE Arrow table (Arrow strings are compact, and
+        # dictionary-encoding ticker makes to_pandas yield a low-memory category).
+        dataset = pads.dataset(files, format="parquet")
+        have = [c for c in cols if c in dataset.schema.names]
+        table = dataset.to_table(columns=have)
+        if "ticker" in table.column_names:
+            i = table.column_names.index("ticker")
+            table = table.set_column(i, "ticker", table.column("ticker").dictionary_encode())
+        df = table.to_pandas()
+        del table
+        gc.collect()
+        return df
 
     cores = _load("hist_cores", ["ticker", "tradeDate", "iv30d", "dlt25Iv30d", "dlt75Iv30d"])
     dailies = _load("hist_dailies", ["ticker", "tradeDate", "clsPx"])
@@ -409,41 +432,65 @@ def build_universe_signal(cache_dir: Path | None = None, lookback: int = 252,
     for df in (cores, dailies, ivrank):
         if not df.empty:
             df["tradeDate"] = pd.to_datetime(df["tradeDate"])
-            df["ticker"] = df["ticker"].astype(str)
+
+    # Unify ticker categories across frames so the merge stays categorical (cheap,
+    # low-memory) instead of upcasting to object strings.
+    nonempty = [df for df in (cores, dailies, ivrank) if not df.empty and "ticker" in df.columns]
+    for df in nonempty:
+        if not isinstance(df["ticker"].dtype, pd.CategoricalDtype):
+            df["ticker"] = df["ticker"].astype("category")
+    if nonempty:
+        cats = pd.api.types.union_categoricals([df["ticker"] for df in nonempty]).categories
+        for df in nonempty:
+            df["ticker"] = pd.Categorical(df["ticker"], categories=cats)
+    # Coerce numerics to float64 (NOT float32 — float32 perturbs ivP/sigma at the
+    # ~1e-6 level and ivP is parity-checked against the tool). The big memory win
+    # is the categorical ticker above, not these two columns.
+    dailies["clsPx"] = pd.to_numeric(dailies["clsPx"], errors="coerce").astype("float64")
+    if not ivrank.empty:
+        ivrank["ivPct1y"] = pd.to_numeric(ivrank["ivPct1y"], errors="coerce").astype("float64")
 
     m = cores.merge(dailies, on=["ticker", "tradeDate"], how="inner")
     if not ivrank.empty:
         m = m.merge(ivrank, on=["ticker", "tradeDate"], how="left")
     else:
         m["ivPct1y"] = np.nan
+    del cores, dailies, ivrank          # free ~half the footprint before the loop
+    gc.collect()
+    m = m.drop_duplicates(["ticker", "tradeDate"], keep="first")  # belt-and-braces vs any dup rows
     m = m.sort_values(["ticker", "tradeDate"]).reset_index(drop=True)
 
     def _vp(s):
         return s.where(s.abs() > 3.0, s * 100.0)
 
-    rows_per_ticker = []
+    # Stream each ticker's signal straight to parquet (one row group per ticker)
+    # so the full output panel is never held in memory at once.
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    writer = None
+    n_rows = tickers_done = 0
     n_tk = m["ticker"].nunique()
-    for j, (tk, g) in enumerate(m.groupby("ticker", sort=False)):
+    for j, (tk, g) in enumerate(m.groupby("ticker", sort=False, observed=True)):
         if len(g) < lookback // 2:
             continue  # too short to ever produce a percentile
-        atm = _vp(g["iv30d"].astype(float)).to_numpy()
-        c25 = _vp(g["dlt25Iv30d"].astype(float)).to_numpy()
-        p25 = _vp(g["dlt75Iv30d"].astype(float)).to_numpy()
+        atm = _vp(g["iv30d"].astype("float64")).to_numpy()
+        c25 = _vp(g["dlt25Iv30d"].astype("float64")).to_numpy()
+        p25 = _vp(g["dlt75Iv30d"].astype("float64")).to_numpy()
         callRaw = c25 - atm
         putRaw = p25 - atm
         rr = callRaw - putRaw
         skew = putRaw - callRaw
-        ac = g["clsPx"].astype(float).to_numpy()
-        logret = np.diff(np.log(ac), prepend=np.nan)
+        ac = g["clsPx"].astype("float64").to_numpy()
+        with np.errstate(divide="ignore", invalid="ignore"):
+            logret = np.diff(np.log(np.where(ac > 0, ac, np.nan)), prepend=np.nan)
         hv20 = pd.Series(logret).rolling(20).std().to_numpy() * np.sqrt(252)
         with np.errstate(invalid="ignore", divide="ignore"):
             sigma = (ac - np.concatenate([[np.nan] * 5, ac[:-5]])) / (ac * hv20 * np.sqrt(5 / 252))
         sigma[~np.isfinite(sigma)] = np.nan  # hv20==0 (no vol) -> inf -> NaN
-        orats_iv = pd.to_numeric(g["ivPct1y"], errors="coerce").to_numpy() if "ivPct1y" in g else np.full(len(g), np.nan)
-        ivP_local = roll_pct_vec(atm, lookback)
-        ivP = np.where(~np.isnan(orats_iv), orats_iv, ivP_local)
-        rows_per_ticker.append(pd.DataFrame({
-            "ticker": tk, "tradeDate": g["tradeDate"].to_numpy(),
+        orats_iv = (pd.to_numeric(g["ivPct1y"], errors="coerce").to_numpy()
+                    if "ivPct1y" in g.columns else np.full(len(g), np.nan))
+        ivP = np.where(~np.isnan(orats_iv), orats_iv, roll_pct_vec(atm, lookback))
+        out_df = pd.DataFrame({
+            "ticker": str(tk), "tradeDate": g["tradeDate"].to_numpy(),
             "clsPx": ac, "atmIV": atm, "callRaw": callRaw, "putRaw": putRaw,
             "skew": skew, "rr": rr,
             "skewDelta": skew - np.concatenate([[np.nan] * 5, skew[:-5]]),
@@ -453,19 +500,25 @@ def build_universe_signal(cache_dir: Path | None = None, lookback: int = 252,
             "ivP": ivP,
             "ivP_source": np.where(~np.isnan(orats_iv), "orats_ivPct1y", "local_pctl"),
             "sigma": sigma,
-        }))
+        })
+        table = pa.Table.from_pandas(out_df, preserve_index=False)
+        if writer is None:
+            writer = pq.ParquetWriter(str(out), table.schema)
+        writer.write_table(table)
+        n_rows += len(out_df)
+        tickers_done += 1
         if (j + 1) % 500 == 0:
             print(f"  signal: {j+1}/{n_tk} tickers")
-
-    sig = pd.concat(rows_per_ticker, ignore_index=True)
-    Path(out).parent.mkdir(parents=True, exist_ok=True)
-    _safe_to_parquet(sig, out)
-    print(f"universe signal: {len(sig):,} (ticker,date) rows, "
-          f"{sig['ticker'].nunique():,} tickers -> {out}")
+    if writer is not None:
+        writer.close()
+    print(f"universe signal: {n_rows:,} (ticker,date) rows, {tickers_done:,} tickers -> {out}")
 
     if self_check:
-        chk = sig[(sig["ticker"] == "AAPL") &
-                  (sig["tradeDate"] == pd.Timestamp("2015-08-05"))]
+        try:
+            chk = pd.read_parquet(out, filters=[("ticker", "==", "AAPL")])
+            chk = chk[chk["tradeDate"] == pd.Timestamp("2015-08-05")]
+        except Exception:
+            chk = pd.DataFrame()
         if not chk.empty:
             r = chk.iloc[0]
             print("  [self-check] AAPL 2015-08-05 via universe fast-path "
@@ -474,7 +527,7 @@ def build_universe_signal(cache_dir: Path | None = None, lookback: int = 252,
                   f"callP={r['callP']} src={r['ivP_source']}")
         else:
             print("  [self-check] AAPL 2015-08-05 not in cache window — skipped.")
-    return sig
+    return {"rows": n_rows, "tickers": tickers_done, "out": str(out)}
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────
