@@ -30,14 +30,37 @@ from .consensus_signal import ConsensusOpts, compute_consensus, signal_sign
 HORIZONS = (5, 10, 21)
 
 
+def _pit_pctl_vec(x, lookback: int = 252, min_obs: int = 126):
+    """Strictly-trailing mid-rank percentile (same methodology as putP/callP): rank x[i]
+    within the lookback values STRICTLY before i. Used by pit_ivp to rebuild ivP from
+    local atmIV with zero look-ahead, instead of trusting ORATS ivPct1y."""
+    from numpy.lib.stride_tricks import sliding_window_view
+    x = np.asarray(x, float); n = len(x); out = np.full(n, np.nan)
+    if n == 0: return out
+    pad = np.concatenate([np.full(lookback, np.nan), x])
+    W = sliding_window_view(pad, lookback)[:n]; cur = x[:, None]
+    finite = np.isfinite(W); cnt = finite.sum(1); Wm = np.where(finite, W, np.nan)
+    with np.errstate(invalid="ignore"):
+        lt = np.nansum(Wm < cur, axis=1); eq = np.nansum(Wm == cur, axis=1)
+    valid = (cnt >= min_obs) & np.isfinite(x)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        pct = (lt + eq / 2.0) / cnt * 100.0
+    out[valid] = pct[valid]; return out
+
+
 def _per_ticker_signal_and_fwd(uni: pd.DataFrame, horizons=HORIZONS,
-                               opts: ConsensusOpts = ConsensusOpts()) -> pd.DataFrame:
+                               opts: ConsensusOpts = ConsensusOpts(), pit_ivp: bool = False) -> pd.DataFrame:
     """Annotate the universe with consensus side + forward returns per ticker.
     `uni` must have columns: ticker, tradeDate, clsPx + the 6 signal columns."""
+    if pit_ivp and "atmIV" not in uni.columns:
+        raise ValueError("pit_ivp=True needs an 'atmIV' column in the panel")
     out = []
     for tk, g in uni.sort_values(["ticker", "tradeDate"]).groupby("ticker", sort=False):
+        if pit_ivp:
+            g = g.copy(); g["ivP"] = _pit_pctl_vec(g["atmIV"].to_numpy(float))
         g = compute_consensus(g, opts)
         px = g["clsPx"].astype(float).to_numpy()
+        px = np.where(px > 0, px, np.nan)   # guard non-positive prices: fwd -> NaN, not inf
         for h in horizons:
             fwd = np.full(len(px), np.nan)
             if len(px) > h:
@@ -48,48 +71,91 @@ def _per_ticker_signal_and_fwd(uni: pd.DataFrame, horizons=HORIZONS,
 
 
 def run_test(uni: pd.DataFrame, horizons=HORIZONS, opts: ConsensusOpts = ConsensusOpts(),
-             n_boot: int = 2000, seed: int = 0) -> dict:
+             n_boot: int = 2000, seed: int = 0, start_date: str = None,
+             price_floor: float = 1.0, max_abs_fwd: float = 5.0,
+             pit_ivp: bool = False, match_high_iv: bool = False,
+             iv_match_threshold: float = 75.0) -> dict:
     """Run the date/direction-matched signal-vs-random test. Returns a dict
-    keyed by horizon with the verdict statistics."""
+    keyed by horizon with the verdict statistics.
+
+    start_date (e.g. '2012-01-01'): score only fires on/after this date. Consensus
+    and forward returns are still computed over the FULL panel (so rolling lookback
+    is preserved at the boundary); only the SCORED signals are restricted. Use it to
+    exclude the 2011 warmup year, whose percentiles the port can't match the tool on.
+    """
     rng = np.random.default_rng(seed)
-    ann = _per_ticker_signal_and_fwd(uni, horizons, opts)
+    ann = _per_ticker_signal_and_fwd(uni, horizons, opts, pit_ivp=pit_ivp)
     fires = ann[ann["side"].notna()].copy()
     fires["sign"] = fires["side"].map(signal_sign)
+    n_raw = int(len(fires))
+    if start_date is not None:
+        fires = fires[fires["tradeDate"] >= pd.Timestamp(start_date)].copy()
 
-    results = {"n_signals_raw": int(len(fires)), "horizons": {}}
+    results = {"n_signals_raw": n_raw,
+               "n_signals_scored": int(len(fires)),
+               "start_date": start_date,
+               "scored_date_range": ([str(pd.Timestamp(fires["tradeDate"].min()).date()),
+                                      str(pd.Timestamp(fires["tradeDate"].max()).date())]
+                                     if len(fires) else None),
+               "variant": {"pit_ivp": bool(pit_ivp), "match_high_iv": bool(match_high_iv),
+                           "iv_match_threshold": iv_match_threshold if match_high_iv else None,
+                           "price_floor": price_floor, "max_abs_fwd": max_abs_fwd},
+               "horizons": {}}
     if fires.empty:
         return results
 
     for h in horizons:
         col = f"fwd{h}"
-        # eligible pool per date: tickers with a valid forward return that day
-        pool = ann[ann[col].notna()][["tradeDate", "ticker", col]]
-        pool_by_date = {d: grp[col].to_numpy()
-                        for d, grp in pool.groupby("tradeDate", sort=False)}
-
-        f = fires[fires[col].notna()].copy()
+        # eligible pool: finite fwd, entry px >= floor, |fwd| <= cap. isfinite alone
+        # lets FINITE extremes from sub-$floor prices ($0.01->$5 = +49900%) poison the
+        # random mean; the price floor + return cap remove them. Counts are reported.
+        fwd_all = ann[col].to_numpy(float); px_all = ann["clsPx"].to_numpy(float)
+        finite = np.isfinite(fwd_all)
+        elig = finite & (px_all >= price_floor) & (np.abs(fwd_all) <= max_abs_fwd)
+        if match_high_iv:
+            elig = elig & (ann["ivP"].to_numpy(float) >= iv_match_threshold)
+        n_drop_price = int((finite & (px_all < price_floor)).sum())
+        n_drop_ret = int((finite & (px_all >= price_floor) & (np.abs(fwd_all) > max_abs_fwd)).sum())
+        pool = ann[elig][["tradeDate", "ticker", col]]
+        pool_by_date = {d: grp[col].to_numpy() for d, grp in pool.groupby("tradeDate", sort=False)}
+        pool_median_by_date = {d: float(np.median(v)) for d, v in pool_by_date.items()}
+        fcol = fires[col].to_numpy(float); fpx = fires["clsPx"].to_numpy(float)
+        f = fires[np.isfinite(fcol) & (fpx >= price_floor) & (np.abs(fcol) <= max_abs_fwd)].copy()
         if f.empty:
             results["horizons"][h] = {"n": 0}
             continue
         sgn = f["sign"].to_numpy(float)
         sig_pnl = sgn * f[col].to_numpy(float)          # signed signal P&L
         signal_mean = float(np.mean(sig_pnl))
+        signal_median = float(np.median(sig_pnl))
         dates = f["tradeDate"].to_numpy()
+        pmed = np.array([pool_median_by_date.get(d, np.nan) for d in dates]); okm = np.isfinite(pmed)
+        beat_pool_median_rate = float(np.mean((sgn[okm]*f[col].to_numpy(float)[okm]) > (sgn[okm]*pmed[okm]))) if okm.any() else float("nan")
 
-        # bootstrap: per fire, draw a random eligible ticker ON THE SAME DATE,
-        # apply the same sign -> matched random mean. Repeat n_boot times.
-        date_pools = [pool_by_date.get(d) for d in dates]
-        valid = np.array([p is not None and len(p) > 0 for p in date_pools])
-        if not valid.any():
+        # Date-grouped VECTORIZED bootstrap (replaces a per-fire Python double-loop
+        # that was O(n_boot * n_fires) Python-level rng calls -> ~90 min). For each
+        # scored date, draw a (k_fires x n_boot) matrix of random picks from that
+        # date's eligible pool, apply each fire's sign, sum across fires, accumulate
+        # across dates. Same date/direction-matched quantity, numpy-fast (seconds).
+        order = np.argsort(dates, kind="stable")
+        sd = dates[order]
+        ss = sgn[order].astype(float)
+        uniq, starts = np.unique(sd, return_index=True)
+        bounds = np.append(starts, len(sd))
+        boot_sums = np.zeros(n_boot, dtype=float)
+        n_used = 0
+        for di in range(len(uniq)):
+            P = pool_by_date.get(uniq[di])
+            if P is None or len(P) == 0:
+                continue
+            s_blk = ss[bounds[di]:bounds[di + 1]]            # (k,)
+            R = rng.integers(len(P), size=(len(s_blk), n_boot))  # (k, n_boot)
+            boot_sums += (s_blk[:, None] * P[R]).sum(axis=0)     # (n_boot,)
+            n_used += len(s_blk)
+        if n_used == 0:
             results["horizons"][h] = {"n": int(len(f)), "note": "no date-matched pool"}
             continue
-        sgn_v = sgn[valid]
-        pools_v = [p for p, ok in zip(date_pools, valid) if ok]
-
-        boot_means = np.empty(n_boot)
-        for b in range(n_boot):
-            draws = np.array([p[rng.integers(len(p))] for p in pools_v])
-            boot_means[b] = float(np.mean(sgn_v * draws))
+        boot_means = boot_sums / n_used
 
         rand_mean = float(boot_means.mean())
         rand_std = float(boot_means.std(ddof=1))
@@ -106,6 +172,10 @@ def run_test(uni: pd.DataFrame, horizons=HORIZONS, opts: ConsensusOpts = Consens
             "z": z,
             "signal_hit_rate": float(np.mean(sig_pnl > 0)),
             "signal_sharpe": float(signal_mean / np.std(sig_pnl)) if np.std(sig_pnl) > 0 else np.nan,
+            "signal_median": signal_median,
+            "beat_pool_median_rate": beat_pool_median_rate,
+            "pool_dropped_below_price_floor": n_drop_price,
+            "pool_dropped_extreme_return": n_drop_ret,
         }
     return results
 
@@ -245,3 +315,23 @@ def summarize(results: dict) -> str:
             f"p={r['p_value']:.4f}  hit={r['signal_hit_rate']*100:.1f}%  "
             f"sharpe={r['signal_sharpe']:.3f}")
     return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    import sys, json
+    _pos = [a for a in sys.argv[1:] if not a.startswith("--")]
+    _flags = {a for a in sys.argv[1:] if a.startswith("--")}
+    if not _pos:
+        print("usage: python -m quant_validator.signal_vs_random <panel.parquet> "
+              "[start_date] [--pit-ivp] [--match-high-iv] [--iv-threshold=75]")
+        sys.exit(1)
+    _panel, _start = _pos[0], (_pos[1] if len(_pos) > 1 else None)
+    _iv_thr = next((float(f.split("=", 1)[1]) for f in _flags
+                    if f.startswith("--iv-threshold=")), 75.0)
+    _res = run_test(pd.read_parquet(_panel), start_date=_start,
+                    pit_ivp=("--pit-ivp" in _flags),
+                    match_high_iv=("--match-high-iv" in _flags),
+                    iv_match_threshold=_iv_thr)
+    print(json.dumps(_res, indent=2, default=str))
+    print()
+    print(summarize(_res))
