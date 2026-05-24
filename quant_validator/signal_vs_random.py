@@ -29,6 +29,12 @@ from .consensus_signal import ConsensusOpts, compute_consensus, signal_sign
 
 HORIZONS = (5, 10, 21)
 
+# Representative liquid-name equity round-trip (half-spread each way + impact +
+# commission). Horizons whose breakeven (gross signal bps) falls below this are
+# flagged as dying under realistic cost. Adjustable; the breakeven itself is the
+# basis-independent headline.
+REALISTIC_RT_BPS = 20.0
+
 
 def _pit_pctl_vec(x, lookback: int = 252, min_obs: int = 126):
     """Strictly-trailing mid-rank percentile (same methodology as putP/callP): rank x[i]
@@ -335,6 +341,126 @@ def _format_temporal_txt(results: dict, summ: dict, horizons=HORIZONS) -> str:
     return "\n".join(L)
 
 
+# ── Cost-survival gate (equity round-trip cost) ──────────────────────────
+
+def cost_survival(gross: dict, costs: list[float], horizons=HORIZONS,
+                  realistic_rt_bps: float = REALISTIC_RT_BPS) -> dict:
+    """Derive net-of-cost rows from ONE (gross) run_test result.
+
+    v22 trades the underlying equity, so a round-trip cost is a clean subtraction
+    in return space. Subtracting it from BOTH signal and pool means it CANCELS in
+    the edge (signal-pool) and leaves the date-grouped bootstrap's z/p/beat
+    unchanged — so the bootstrap is reused once, not re-run per cost. The binding
+    constraint is the ABSOLUTE net signal return; breakeven = gross signal mean.
+    """
+    h = gross.get("horizons", {})
+    rows, per_h = [], {}
+    for hz in horizons:
+        r = h.get(hz) or h.get(str(hz)) or {}
+        if not r.get("n"):
+            per_h[hz] = None
+            continue
+        gsig, gpool = r["signal_mean"], r["random_mean"]
+        edge = gsig - gpool
+        be_bps = gsig * 1e4
+        per_h[hz] = {"gross_signal_bps": gsig * 1e4, "gross_pool_bps": gpool * 1e4,
+                     "edge_bps": edge * 1e4, "z": r.get("z"), "p": r.get("p_value"),
+                     "beat": r.get("beat_pool_median_rate"), "n": int(r["n"]),
+                     "breakeven_bps": be_bps, "dies_realistic": be_bps < realistic_rt_bps}
+        for c in costs:
+            cf = c / 1e4
+            net_sig = gsig - cf
+            rows.append({"cost_bps": c, "horizon": hz, "n_fires": int(r["n"]),
+                         "net_signal_bps": net_sig * 1e4, "net_pool_bps": (gpool - cf) * 1e4,
+                         "net_edge_bps": edge * 1e4, "z": r.get("z"), "p_value": r.get("p_value"),
+                         "beat_pool_median": r.get("beat_pool_median_rate"),
+                         "dead": bool(net_sig <= 0), "breakeven_bps": be_bps,
+                         "dies_realistic": bool(be_bps < realistic_rt_bps)})
+    return {"rows": rows, "per_horizon": per_h, "realistic_rt_bps": realistic_rt_bps}
+
+
+def _cost_sanity(gross: dict, ref_csv: str = "reports/step2_verdict_rerun.csv",
+                 horizons=HORIZONS) -> dict | None:
+    """cost=0 must reproduce Prompt A's headline (pass 1, total/full). Compares the
+    gross run's per-trade + edge (bps) to the committed verdict CSV."""
+    import os
+    if not os.path.exists(ref_csv):
+        return None
+    ref = pd.read_csv(ref_csv)
+    ref = ref[ref["pass"] == "1_HEADLINE_total_full"]
+    h, out = gross.get("horizons", {}), {}
+    for hz in horizons:
+        r = h.get(hz) or h.get(str(hz)) or {}
+        rr = ref[ref["horizon"] == hz]
+        if not r.get("n") or rr.empty:
+            continue
+        this_g, this_e = r["signal_mean"] * 1e4, (r["signal_mean"] - r["random_mean"]) * 1e4
+        pa_g, pa_e = float(rr["gross_per_trade_bps"].iloc[0]), float(rr["increment_bps"].iloc[0])
+        out[hz] = {"this_gross_bps": this_g, "pa_gross_bps": pa_g, "this_edge_bps": this_e,
+                   "pa_edge_bps": pa_e, "match": abs(this_g - pa_g) < 0.5 and abs(this_e - pa_e) < 0.5}
+    return out
+
+
+def _format_cost_txt(cres: dict, start: str | None, sanity: dict | None,
+                     horizons=HORIZONS) -> str:
+    L = ["=" * 90,
+         "COST-SURVIVAL GATE — equity round-trip cost on the clean survivorship-free panel",
+         "=" * 90,
+         "v22 trades the underlying EQUITY (options pick direction only), so cost is a clean",
+         "equity round-trip in return space. A flat round-trip cost is subtracted from BOTH the",
+         "signal and the random pool; because it hits both sides equally it CANCELS in the edge",
+         "(signal-pool), so net_edge and its z/p/beat are cost-INVARIANT (the date-grouped",
+         "bootstrap is reused once). The binding constraint is the ABSOLUTE net signal return:",
+         "net_signal = gross - cost; BREAKEVEN round-trip cost = gross signal mean (bps).",
+         f"Window from {start}; basis = total-return; universe = full (survivorship-free).",
+         ""]
+    if sanity:
+        L.append("-- SANITY: cost=0 must reproduce Prompt A headline (pass 1 total/full) " + "-" * 17)
+        allok = all(v["match"] for v in sanity.values())
+        for hz in horizons:
+            v = sanity.get(hz)
+            if not v:
+                continue
+            L.append(f"  {hz:>2}d: gross={v['this_gross_bps']:+.1f}bps (A:{v['pa_gross_bps']:+.1f}) "
+                     f"edge={v['this_edge_bps']:+.1f}bps (A:{v['pa_edge_bps']:+.1f})  "
+                     f"{'MATCH' if v['match'] else 'MISMATCH'}")
+        L.append(f"  -> {'PASS — costed rows trustworthy' if allok else 'FAIL — do NOT trust costed rows'}")
+        L.append("")
+
+    L.append("-- COST SWEEP (net of round-trip cost; net_edge/z/p/beat are cost-invariant) " + "-" * 9)
+    hdr = (f"  {'cost':>4} | {'h':>3} | {'net_sig(bps)':>12} | {'net_pool(bps)':>13} | "
+           f"{'net_edge(bps)':>13} | {'z':>6} | {'p':>7} | {'beat':>6} | dead")
+    L += [hdr, "  " + "-" * (len(hdr) - 2)]
+    for r in cres["rows"]:
+        z = f"{r['z']:+.2f}" if r["z"] is not None else "  n/a"
+        p = f"{r['p_value']:.4f}" if r["p_value"] is not None else "  n/a"
+        bm = f"{r['beat_pool_median']*100:.1f}%" if r["beat_pool_median"] is not None else " n/a"
+        L.append(f"  {r['cost_bps']:>4.0f} | {r['horizon']:>3} | {r['net_signal_bps']:>+12.1f} | "
+                 f"{r['net_pool_bps']:>+13.1f} | {r['net_edge_bps']:>+13.1f} | {z:>6} | {p:>7} | "
+                 f"{bm:>6} | {'DEAD' if r['dead'] else ''}")
+    L.append("")
+
+    L.append(f"-- BREAKEVEN round-trip cost (HEADLINE) + realistic flag (< {cres['realistic_rt_bps']:.0f} bps) "
+             + "-" * 12)
+    for hz in horizons:
+        ph = cres["per_horizon"].get(hz)
+        if not ph:
+            L.append(f"  {hz:>2}d: (no fires)")
+            continue
+        verdict = ("DIES under realistic cost" if ph["dies_realistic"]
+                   else "survives" + (" (big cushion)" if ph["breakeven_bps"] > 75 else ""))
+        L.append(f"  {hz:>2}d: breakeven = {ph['breakeven_bps']:6.1f} bps  (gross edge "
+                 f"{ph['edge_bps']:+.1f} bps, z={ph['z']:+.2f}) -> {verdict}")
+    L.append("")
+    L.append("-- LIQUIDITY FOLLOW-ON (noted, not built) " + "-" * 35)
+    L.append("  AV now provides per-name volume, so a dollar-volume-tiered cost pass is unblocked:")
+    L.append("  scale the round-trip cost by each name's ADV tier instead of a flat bps. The")
+    L.append("  liquid (high-$-volume) subset likely carries a different — probably smaller-")
+    L.append("  breakeven — edge than the illiquid tail, which here inflates the pooled breakeven.")
+    L.append("")
+    return "\n".join(L)
+
+
 def validate_against_csv(uni: pd.DataFrame, csv_path: str,
                          opts: ConsensusOpts = ConsensusOpts(),
                          warmup: int = 252) -> dict:
@@ -496,6 +622,10 @@ def _cli(argv: list[str] | None = None) -> dict:
     ap.add_argument("--period_freq", choices=["year", "regime"], default="year",
                     help="year (default); 'regime' is a NotImplementedError stub")
     ap.add_argument("--end_date", default=None, help="by_period only: last date to bucket")
+    ap.add_argument("--cost_bps", type=float, default=None,
+                    help="single round-trip equity cost (bps), subtracted from signal AND pool")
+    ap.add_argument("--cost_sweep", default=None,
+                    help='comma list of round-trip costs in bps, e.g. "0,5,10,15,20,30,50"')
     args = ap.parse_args(argv)
 
     if args.panel == "clean":
@@ -524,6 +654,32 @@ def _cli(argv: list[str] | None = None) -> dict:
         print(txt)
         print("wrote reports/gate_temporal_stability.{txt,csv}")
         return results
+
+    if args.cost_sweep or args.cost_bps is not None:
+        from pathlib import Path
+        if args.panel == "clean":
+            surv = survivor_tickers_from_map(args.symbol_map) if args.universe == "active" else None
+            ann = annotate_clean(panel, returns=args.returns, universe=args.universe,
+                                 survivor_tickers=surv)
+            price_col = "raw_close"
+        else:
+            ann = _per_ticker_signal_and_fwd(panel, opts=ConsensusOpts(), pit_ivp=args.pit_ivp)
+            price_col = "clsPx"
+        gross = run_test(ann=ann, price_col=price_col, start_date=args.start_date,
+                         match_high_iv=args.match_high_iv, iv_match_threshold=args.iv_threshold)
+        if args.cost_sweep:
+            costs = [float(x) for x in args.cost_sweep.split(",") if x.strip() != ""]
+        else:
+            costs = [float(args.cost_bps)]
+        cres = cost_survival(gross, costs)
+        sanity = _cost_sanity(gross)
+        txt = _format_cost_txt(cres, args.start_date, sanity)
+        Path("reports").mkdir(parents=True, exist_ok=True)
+        Path("reports/gate_cost_survival.txt").write_text(txt, encoding="utf-8")
+        pd.DataFrame(cres["rows"]).to_csv("reports/gate_cost_survival.csv", index=False)
+        print(txt)
+        print("wrote reports/gate_cost_survival.{txt,csv}")
+        return cres
 
     if args.panel == "orats":
         res = run_test(uni=panel, start_date=args.start_date, pit_ivp=args.pit_ivp,

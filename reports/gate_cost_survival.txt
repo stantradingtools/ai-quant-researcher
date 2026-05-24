@@ -1,0 +1,52 @@
+==========================================================================================
+COST-SURVIVAL GATE — equity round-trip cost on the clean survivorship-free panel
+==========================================================================================
+v22 trades the underlying EQUITY (options pick direction only), so cost is a clean
+equity round-trip in return space. A flat round-trip cost is subtracted from BOTH the
+signal and the random pool; because it hits both sides equally it CANCELS in the edge
+(signal-pool), so net_edge and its z/p/beat are cost-INVARIANT (the date-grouped
+bootstrap is reused once). The binding constraint is the ABSOLUTE net signal return:
+net_signal = gross - cost; BREAKEVEN round-trip cost = gross signal mean (bps).
+Window from 2012-01-01; basis = total-return; universe = full (survivorship-free).
+
+-- SANITY: cost=0 must reproduce Prompt A headline (pass 1 total/full) -----------------
+   5d: gross=+15.0bps (A:+15.0) edge=+1.4bps (A:+1.4)  MATCH
+  10d: gross=+33.3bps (A:+33.3) edge=+5.7bps (A:+5.7)  MATCH
+  21d: gross=+106.5bps (A:+106.5) edge=+18.3bps (A:+18.3)  MATCH
+  -> PASS — costed rows trustworthy
+
+-- COST SWEEP (net of round-trip cost; net_edge/z/p/beat are cost-invariant) ---------
+  cost |   h | net_sig(bps) | net_pool(bps) | net_edge(bps) |      z |       p |   beat | dead
+  --------------------------------------------------------------------------------------------
+     0 |   5 |        +15.0 |         +13.5 |          +1.4 |  +1.46 |  0.0780 |  51.0% | 
+     5 |   5 |        +10.0 |          +8.5 |          +1.4 |  +1.46 |  0.0780 |  51.0% | 
+    10 |   5 |         +5.0 |          +3.5 |          +1.4 |  +1.46 |  0.0780 |  51.0% | 
+    15 |   5 |         -0.0 |          -1.5 |          +1.4 |  +1.46 |  0.0780 |  51.0% | DEAD
+    20 |   5 |         -5.0 |          -6.5 |          +1.4 |  +1.46 |  0.0780 |  51.0% | DEAD
+    30 |   5 |        -15.0 |         -16.5 |          +1.4 |  +1.46 |  0.0780 |  51.0% | DEAD
+    50 |   5 |        -35.0 |         -36.5 |          +1.4 |  +1.46 |  0.0780 |  51.0% | DEAD
+     0 |  10 |        +33.3 |         +27.6 |          +5.7 |  +4.06 |  0.0005 |  51.3% | 
+     5 |  10 |        +28.3 |         +22.6 |          +5.7 |  +4.06 |  0.0005 |  51.3% | 
+    10 |  10 |        +23.3 |         +17.6 |          +5.7 |  +4.06 |  0.0005 |  51.3% | 
+    15 |  10 |        +18.3 |         +12.6 |          +5.7 |  +4.06 |  0.0005 |  51.3% | 
+    20 |  10 |        +13.3 |          +7.6 |          +5.7 |  +4.06 |  0.0005 |  51.3% | 
+    30 |  10 |         +3.3 |          -2.4 |          +5.7 |  +4.06 |  0.0005 |  51.3% | 
+    50 |  10 |        -16.7 |         -22.4 |          +5.7 |  +4.06 |  0.0005 |  51.3% | DEAD
+     0 |  21 |       +106.5 |         +88.3 |         +18.3 |  +9.12 |  0.0005 |  51.6% | 
+     5 |  21 |       +101.5 |         +83.3 |         +18.3 |  +9.12 |  0.0005 |  51.6% | 
+    10 |  21 |        +96.5 |         +78.3 |         +18.3 |  +9.12 |  0.0005 |  51.6% | 
+    15 |  21 |        +91.5 |         +73.3 |         +18.3 |  +9.12 |  0.0005 |  51.6% | 
+    20 |  21 |        +86.5 |         +68.3 |         +18.3 |  +9.12 |  0.0005 |  51.6% | 
+    30 |  21 |        +76.5 |         +58.3 |         +18.3 |  +9.12 |  0.0005 |  51.6% | 
+    50 |  21 |        +56.5 |         +38.3 |         +18.3 |  +9.12 |  0.0005 |  51.6% | 
+
+-- BREAKEVEN round-trip cost (HEADLINE) + realistic flag (< 20 bps) ------------
+   5d: breakeven =   15.0 bps  (gross edge +1.4 bps, z=+1.46) -> DIES under realistic cost
+  10d: breakeven =   33.3 bps  (gross edge +5.7 bps, z=+4.06) -> survives
+  21d: breakeven =  106.5 bps  (gross edge +18.3 bps, z=+9.12) -> survives (big cushion)
+
+-- LIQUIDITY FOLLOW-ON (noted, not built) -----------------------------------
+  AV now provides per-name volume, so a dollar-volume-tiered cost pass is unblocked:
+  scale the round-trip cost by each name's ADV tier instead of a flat bps. The
+  liquid (high-$-volume) subset likely carries a different — probably smaller-
+  breakeven — edge than the illiquid tail, which here inflates the pooled breakeven.
