@@ -1,0 +1,49 @@
+========================================================================================
+STEP-2 VERDICT RE-RUN — signal-vs-random on the AV-clean survivorship-free panel
+========================================================================================
+Premise correction (1c): ORATS clsPx was ALREADY split+dividend adjusted — NOT
+split-contaminated. The real ORATS artifact was the 505 zero-close rows. This
+re-run tests SURVIVORSHIP + zero-close robustness; total-return is the matched
+basis vs the original ORATS reference. The consensus signal is UNCHANGED.
+Scored window: from 2012-01-01. increment = signal_mean - random_mean.
+
+PASS 1 — HEADLINE (total-return, full survivorship-free universe)
+  raw fires (pre-window): 495705 | scored: 495705
+    h |   n_fires | incr(bps) | rand(bps) | gross(bps) |      z |       p | beat_med
+  ----------------------------------------------------------------------------------
+    5 |   477,293 |    +1.4 |   +13.5 |       15.0 |  +1.46 |  0.0780 |    51.0%
+   10 |   477,126 |    +5.7 |   +27.6 |       33.3 |  +4.06 |  0.0005 |    51.3%
+   21 |   475,430 |   +18.3 |   +88.3 |      106.5 |  +9.12 |  0.0005 |    51.6%
+
+PASS 2 — SURVIVORSHIP DIAGNOSTIC (total-return, survivors only)
+  raw fires (pre-window): 412003 | scored: 412003
+    h |   n_fires | incr(bps) | rand(bps) | gross(bps) |      z |       p | beat_med
+  ----------------------------------------------------------------------------------
+    5 |   400,562 |    +2.6 |   +15.1 |       17.7 |  +2.31 |  0.0125 |    51.0%
+   10 |   400,544 |    +6.4 |   +30.3 |       36.8 |  +4.31 |  0.0005 |    51.3%
+   21 |   399,266 |   +19.4 |   +93.1 |      112.5 |  +8.94 |  0.0005 |    51.7%
+
+PASS 3 — BASIS ROBUSTNESS (split-only, full universe)
+  raw fires (pre-window): 495705 | scored: 495705
+    h |   n_fires | incr(bps) | rand(bps) | gross(bps) |      z |       p | beat_med
+  ----------------------------------------------------------------------------------
+    5 |   477,293 |    +1.8 |   +11.8 |       13.6 |  +1.83 |  0.0365 |    51.0%
+   10 |   477,126 |    +5.8 |   +24.0 |       29.8 |  +4.17 |  0.0005 |    51.3%
+   21 |   475,430 |   +17.6 |   +80.3 |       97.9 |  +8.77 |  0.0005 |    51.6%
+
+PASS 4 — CONFOUND RECHECK (match_high_iv on pass 1)
+  raw fires (pre-window): 495705 | scored: 495705
+    h |   n_fires | incr(bps) | rand(bps) | gross(bps) |      z |       p | beat_med
+  ----------------------------------------------------------------------------------
+    5 |   477,293 |    +2.1 |   +12.9 |       15.0 |  +1.78 |  0.0375 |    50.9%
+   10 |   477,126 |    +6.6 |   +26.7 |       33.3 |  +4.12 |  0.0005 |    51.2%
+   21 |   475,430 |   +19.3 |   +87.3 |      106.5 |  +8.76 |  0.0005 |    51.5%
+
+-- READOUT (21-day) --------------------------------------------------------------------
+  Original ORATS reference 21d increment : +22.6 bps
+  HEADLINE 21d increment                 : +18.3 bps (81% of reference), beat_pool_median=51.6%
+    -> PASS: economically meaningful (>= 10 bps)=True AND beat_pool_median>50%=True
+  Survivorship delta (active - full)     : +1.1 bps -> OK (no material inflation)
+    active 21d=+19.4 bps vs full 21d=+18.3 bps
+  Basis delta (total - split)            : +0.7 bps (expect small, dividend-only)
+  Confound (match_high_iv) 21d increment : +19.3 bps, z=+8.76 -> edge persists under an IV-matched pool

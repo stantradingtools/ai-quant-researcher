@@ -70,11 +70,12 @@ def _per_ticker_signal_and_fwd(uni: pd.DataFrame, horizons=HORIZONS,
     return pd.concat(out, ignore_index=True)
 
 
-def run_test(uni: pd.DataFrame, horizons=HORIZONS, opts: ConsensusOpts = ConsensusOpts(),
+def run_test(uni: pd.DataFrame = None, horizons=HORIZONS, opts: ConsensusOpts = ConsensusOpts(),
              n_boot: int = 2000, seed: int = 0, start_date: str = None,
              price_floor: float = 1.0, max_abs_fwd: float = 5.0,
              pit_ivp: bool = False, match_high_iv: bool = False,
-             iv_match_threshold: float = 75.0) -> dict:
+             iv_match_threshold: float = 75.0,
+             ann: pd.DataFrame = None, price_col: str = "clsPx") -> dict:
     """Run the date/direction-matched signal-vs-random test. Returns a dict
     keyed by horizon with the verdict statistics.
 
@@ -82,9 +83,19 @@ def run_test(uni: pd.DataFrame, horizons=HORIZONS, opts: ConsensusOpts = Consens
     and forward returns are still computed over the FULL panel (so rolling lookback
     is preserved at the boundary); only the SCORED signals are restricted. Use it to
     exclude the 2011 warmup year, whose percentiles the port can't match the tool on.
+
+    ann: pre-annotated frame (side + fwd{h} + price_col already present) for the
+    CLEAN-PANEL path; when None, the ORATS path computes it via compute_consensus +
+    clsPx forward returns (UNCHANGED). price_col: the as-traded price for the $1 floor
+    ('clsPx' for ORATS; 'raw_close' for the clean panel). The eligible random POOL is
+    drawn from `ann` itself, so a survivorship-free signal is matched to a
+    survivorship-free pool (and an active-only signal to an active-only pool).
     """
     rng = np.random.default_rng(seed)
-    ann = _per_ticker_signal_and_fwd(uni, horizons, opts, pit_ivp=pit_ivp)
+    if ann is None:
+        if uni is None:
+            raise ValueError("run_test needs either `uni` (ORATS path) or `ann` (clean path)")
+        ann = _per_ticker_signal_and_fwd(uni, horizons, opts, pit_ivp=pit_ivp)
     fires = ann[ann["side"].notna()].copy()
     fires["sign"] = fires["side"].map(signal_sign)
     n_raw = int(len(fires))
@@ -109,7 +120,7 @@ def run_test(uni: pd.DataFrame, horizons=HORIZONS, opts: ConsensusOpts = Consens
         # eligible pool: finite fwd, entry px >= floor, |fwd| <= cap. isfinite alone
         # lets FINITE extremes from sub-$floor prices ($0.01->$5 = +49900%) poison the
         # random mean; the price floor + return cap remove them. Counts are reported.
-        fwd_all = ann[col].to_numpy(float); px_all = ann["clsPx"].to_numpy(float)
+        fwd_all = ann[col].to_numpy(float); px_all = ann[price_col].to_numpy(float)
         finite = np.isfinite(fwd_all)
         elig = finite & (px_all >= price_floor) & (np.abs(fwd_all) <= max_abs_fwd)
         if match_high_iv:
@@ -119,7 +130,7 @@ def run_test(uni: pd.DataFrame, horizons=HORIZONS, opts: ConsensusOpts = Consens
         pool = ann[elig][["tradeDate", "ticker", col]]
         pool_by_date = {d: grp[col].to_numpy() for d, grp in pool.groupby("tradeDate", sort=False)}
         pool_median_by_date = {d: float(np.median(v)) for d, v in pool_by_date.items()}
-        fcol = fires[col].to_numpy(float); fpx = fires["clsPx"].to_numpy(float)
+        fcol = fires[col].to_numpy(float); fpx = fires[price_col].to_numpy(float)
         f = fires[np.isfinite(fcol) & (fpx >= price_floor) & (np.abs(fcol) <= max_abs_fwd)].copy()
         if f.empty:
             results["horizons"][h] = {"n": 0}
@@ -178,6 +189,39 @@ def run_test(uni: pd.DataFrame, horizons=HORIZONS, opts: ConsensusOpts = Consens
             "pool_dropped_extreme_return": n_drop_ret,
         }
     return results
+
+
+def survivor_tickers_from_map(symbol_map_path: str = "data/av/symbol_map.csv") -> set[str]:
+    """ORATS tickers whose AV listing is still active (status='active' in symbol_map).
+    Used by the survivorship-bias diagnostic (--universe active)."""
+    m = pd.read_csv(symbol_map_path, dtype=str, keep_default_na=False)
+    act = m[m["av_status"].astype(str).str.strip().str.casefold() == "active"]
+    return set(act["orats_ticker"].astype(str).str.strip().str.upper())
+
+
+def annotate_clean(panel: pd.DataFrame, returns: str = "total", universe: str = "full",
+                   survivor_tickers: set[str] | None = None, horizons=HORIZONS) -> pd.DataFrame:
+    """Build the run_test `ann` frame from data/av/signal_panel_clean.parquet.
+
+    The consensus `side` is taken AS-IS from the clean panel (materialized earlier
+    from the UNCHANGED ORATS signal) — we never recompute it here. Forward returns
+    come from av_fwd_{h}_{returns}, kept only where fwd_available_{h}. Rows are
+    restricted to av_matched; universe='active' further restricts to survivor tickers
+    so the date-matched random pool is drawn from the same (survivors-only) universe.
+    """
+    if returns not in ("total", "split"):
+        raise ValueError("returns must be 'total' or 'split'")
+    if universe not in ("full", "active"):
+        raise ValueError("universe must be 'full' or 'active'")
+    df = panel[panel["av_matched"].astype(bool)].copy()
+    if universe == "active":
+        if not survivor_tickers:
+            raise ValueError("universe='active' needs survivor_tickers")
+        df = df[df["ticker"].astype(str).str.upper().isin(survivor_tickers)].copy()
+    for h in horizons:
+        avail = df[f"fwd_available_{h}"].astype(bool)
+        df[f"fwd{h}"] = df[f"av_fwd_{h}_{returns}"].where(avail)
+    return df
 
 
 def validate_against_csv(uni: pd.DataFrame, csv_path: str,
@@ -317,21 +361,44 @@ def summarize(results: dict) -> str:
     return "\n".join(lines)
 
 
-if __name__ == "__main__":
-    import sys, json
-    _pos = [a for a in sys.argv[1:] if not a.startswith("--")]
-    _flags = {a for a in sys.argv[1:] if a.startswith("--")}
-    if not _pos:
-        print("usage: python -m quant_validator.signal_vs_random <panel.parquet> "
-              "[start_date] [--pit-ivp] [--match-high-iv] [--iv-threshold=75]")
-        sys.exit(1)
-    _panel, _start = _pos[0], (_pos[1] if len(_pos) > 1 else None)
-    _iv_thr = next((float(f.split("=", 1)[1]) for f in _flags
-                    if f.startswith("--iv-threshold=")), 75.0)
-    _res = run_test(pd.read_parquet(_panel), start_date=_start,
-                    pit_ivp=("--pit-ivp" in _flags),
-                    match_high_iv=("--match-high-iv" in _flags),
-                    iv_match_threshold=_iv_thr)
-    print(json.dumps(_res, indent=2, default=str))
+def _cli(argv: list[str] | None = None) -> dict:
+    import argparse
+    import json
+    ap = argparse.ArgumentParser(prog="quant_validator.signal_vs_random")
+    ap.add_argument("panel_path",
+                    help="universe_signal.parquet (orats) | signal_panel_clean.parquet (clean)")
+    ap.add_argument("start_date", nargs="?", default=None)
+    ap.add_argument("--panel", choices=["orats", "clean"], default="orats",
+                    help="orats (default, back-compat): recompute side + clsPx fwd; "
+                         "clean: take side as-is + use av_fwd_* returns")
+    ap.add_argument("--returns", choices=["total", "split"], default="total",
+                    help="clean only: av_fwd_*_total (default) vs av_fwd_*_split")
+    ap.add_argument("--universe", choices=["full", "active"], default="full",
+                    help="clean only: full=all av_matched (survivorship-free); "
+                         "active=survivor tickers only (survivorship-bias diagnostic)")
+    ap.add_argument("--pit-ivp", action="store_true")
+    ap.add_argument("--match-high-iv", action="store_true")
+    ap.add_argument("--iv-threshold", type=float, default=75.0)
+    ap.add_argument("--symbol-map", default="data/av/symbol_map.csv")
+    args = ap.parse_args(argv)
+
+    panel = pd.read_parquet(args.panel_path)
+    if args.panel == "orats":
+        res = run_test(uni=panel, start_date=args.start_date, pit_ivp=args.pit_ivp,
+                       match_high_iv=args.match_high_iv, iv_match_threshold=args.iv_threshold)
+    else:
+        surv = survivor_tickers_from_map(args.symbol_map) if args.universe == "active" else None
+        ann = annotate_clean(panel, returns=args.returns, universe=args.universe,
+                             survivor_tickers=surv)
+        res = run_test(ann=ann, price_col="raw_close", start_date=args.start_date,
+                       match_high_iv=args.match_high_iv, iv_match_threshold=args.iv_threshold)
+    print(json.dumps(res, indent=2, default=str))
     print()
-    print(summarize(_res))
+    print(summarize(res))
+    return res
+
+
+if __name__ == "__main__":
+    import sys
+    _cli()
+    sys.exit(0)
