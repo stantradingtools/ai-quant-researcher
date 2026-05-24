@@ -224,6 +224,117 @@ def annotate_clean(panel: pd.DataFrame, returns: str = "total", universe: str = 
     return df
 
 
+def clean_run_columns(horizons=HORIZONS) -> list[str]:
+    """The subset of signal_panel_clean.parquet columns run_test actually needs
+    (side + both fwd bases + raw_close floor + ivP for the confound). Reading only
+    these keeps the 1.9 GB panel's memory footprint down for the verdict/by-period."""
+    return (["ticker", "tradeDate", "side", "raw_close", "ivP", "av_matched"]
+            + [f"fwd_available_{h}" for h in horizons]
+            + [f"av_fwd_{h}_total" for h in horizons]
+            + [f"av_fwd_{h}_split" for h in horizons])
+
+
+# ── Temporal-stability gate (per-period verdict) ─────────────────────────
+
+def run_by_period(ann: pd.DataFrame, *, price_col: str = "clsPx", period_freq: str = "year",
+                  start_date: str | None = None, end_date: str | None = None,
+                  n_boot: int = 2000, seed: int = 0, match_high_iv: bool = False,
+                  iv_match_threshold: float = 75.0, horizons=HORIZONS) -> dict:
+    """Run the SAME vs-random verdict (run_test) independently per period.
+
+    Because the bootstrap is date/direction-matched, slicing `ann` to one period
+    restricts BOTH the signal fires AND the random pool to that period — so each
+    bucket reuses the pooled date-grouped bootstrap + tradeable guard verbatim
+    (the stats are NOT forked). Returns {period_label: run_test result}.
+    """
+    if period_freq == "regime":
+        raise NotImplementedError(
+            "--period_freq regime is not implemented yet (only 'year'). Regime "
+            "bucketing (e.g. VIX / market-state windows) is a planned extension.")
+    if period_freq != "year":
+        raise ValueError(f"unknown period_freq: {period_freq!r}")
+    a = ann
+    if start_date is not None:
+        a = a[a["tradeDate"] >= pd.Timestamp(start_date)]
+    if end_date is not None:
+        a = a[a["tradeDate"] <= pd.Timestamp(end_date)]
+    out: dict[int, dict] = {}
+    for y in sorted(pd.to_datetime(a["tradeDate"]).dt.year.unique()):
+        ann_y = a[pd.to_datetime(a["tradeDate"]).dt.year == y]
+        out[int(y)] = run_test(ann=ann_y, price_col=price_col, n_boot=n_boot, seed=seed,
+                               match_high_iv=match_high_iv, iv_match_threshold=iv_match_threshold)
+    return out
+
+
+def _h21(res: dict) -> dict:
+    return res.get("horizons", {}).get(21) or res.get("horizons", {}).get("21") or {}
+
+
+def summarize_by_period(results: dict, horizons=HORIZONS) -> dict:
+    """Flatten per-period results and flag instability. A period is FLAGGED if, at
+    21d, the increment flips sign (<0), loses significance (p>0.05), or
+    beat_pool_median < 50%. Verdict = 'stable' unless any period is flagged."""
+    rows, flagged, reasons_by = [], [], {}
+    for y in sorted(results):
+        r21 = _h21(results[y])
+        reasons = []
+        if r21.get("n"):
+            inc21 = r21["signal_mean"] - r21["random_mean"]
+            if inc21 < 0:
+                reasons.append("21d increment<0")
+            if (r21.get("p_value") or 1.0) > 0.05:
+                reasons.append("21d p>0.05")
+            if (r21.get("beat_pool_median_rate") or 0.0) < 0.5:
+                reasons.append("21d beat<50%")
+        else:
+            reasons.append("no 21d fires")
+        if reasons:
+            flagged.append(y)
+            reasons_by[y] = ";".join(reasons)
+        for h in horizons:
+            r = results[y].get("horizons", {}).get(h) or results[y].get("horizons", {}).get(str(h)) or {}
+            inc = (r["signal_mean"] - r["random_mean"]) if r.get("n") else None
+            rows.append({"year": y, "horizon": h, "n_fires": int(r.get("n", 0)),
+                         "increment": inc, "increment_bps": (inc * 1e4) if inc is not None else None,
+                         "z": r.get("z"), "p_value": r.get("p_value"),
+                         "beat_pool_median": r.get("beat_pool_median_rate"),
+                         "year_flagged": y in flagged,
+                         "flag_reason": reasons_by.get(y, "")})
+    verdict = "stable" if not flagged else f"regime-concentrated — years {flagged}"
+    return {"rows": rows, "flagged_years": flagged, "verdict": verdict, "reasons": reasons_by}
+
+
+def _format_temporal_txt(results: dict, summ: dict, horizons=HORIZONS) -> str:
+    L = ["=" * 90,
+         "TEMPORAL-STABILITY GATE — per-year vs-random verdict (clean survivorship-free panel)",
+         "=" * 90,
+         "Buckets the verdict by calendar year, reusing the pooled date-grouped bootstrap +",
+         "tradeable guard per year (stats NOT forked). Clean matters: the 1,946 delisted names",
+         "cluster in stress years (2008-09 pre-window, 2020, 2022), so survivorship-free pricing",
+         "is essential to a fair per-year read. A year is FLAGGED on 21d if the increment flips",
+         "sign, loses significance (p>0.05), or beat_pool_median < 50%.",
+         ""]
+    hdr = (f"  {'year':>4} | {'h':>3} | {'n_fires':>8} | {'incr(bps)':>9} | {'z':>6} | "
+           f"{'p':>7} | {'beat_med':>8} | flag")
+    L += [hdr, "  " + "-" * (len(hdr) - 2)]
+    rowmap = {(r["year"], r["horizon"]): r for r in summ["rows"]}
+    for y in sorted(results):
+        for h in horizons:
+            r = rowmap[(y, h)]
+            inc = f"{r['increment_bps']:+8.1f}" if r["increment_bps"] is not None else "     n/a"
+            z = f"{r['z']:+.2f}" if r["z"] is not None else "   n/a"
+            p = f"{r['p_value']:.4f}" if r["p_value"] is not None else "    n/a"
+            bm = f"{r['beat_pool_median']*100:.1f}%" if r["beat_pool_median"] is not None else "  n/a"
+            flag = "FLAG" if (h == 21 and r["year_flagged"]) else ""
+            L.append(f"  {y:>4} | {h:>3} | {r['n_fires']:>8,} | {inc} | {z:>6} | {p:>7} | {bm:>8} | {flag}")
+        L.append("")
+    L += ["-- VERDICT " + "-" * 78, f"  {summ['verdict']}"]
+    for y in summ["flagged_years"]:
+        L.append(f"    {y}: {summ['reasons'][y]}")
+    L.append("")
+    return "\n".join(L)
+
+
 def validate_against_csv(uni: pd.DataFrame, csv_path: str,
                          opts: ConsensusOpts = ConsensusOpts(),
                          warmup: int = 252) -> dict:
@@ -380,9 +491,40 @@ def _cli(argv: list[str] | None = None) -> dict:
     ap.add_argument("--match-high-iv", action="store_true")
     ap.add_argument("--iv-threshold", type=float, default=75.0)
     ap.add_argument("--symbol-map", default="data/av/symbol_map.csv")
+    ap.add_argument("--by_period", action="store_true",
+                    help="run the verdict per period instead of pooled (temporal-stability gate)")
+    ap.add_argument("--period_freq", choices=["year", "regime"], default="year",
+                    help="year (default); 'regime' is a NotImplementedError stub")
+    ap.add_argument("--end_date", default=None, help="by_period only: last date to bucket")
     args = ap.parse_args(argv)
 
-    panel = pd.read_parquet(args.panel_path)
+    if args.panel == "clean":
+        panel = pd.read_parquet(args.panel_path, columns=clean_run_columns())
+    else:
+        panel = pd.read_parquet(args.panel_path)
+
+    if args.by_period:
+        from pathlib import Path
+        if args.panel == "clean":
+            surv = survivor_tickers_from_map(args.symbol_map) if args.universe == "active" else None
+            ann = annotate_clean(panel, returns=args.returns, universe=args.universe,
+                                 survivor_tickers=surv)
+            price_col = "raw_close"
+        else:
+            ann = _per_ticker_signal_and_fwd(panel, opts=ConsensusOpts(), pit_ivp=args.pit_ivp)
+            price_col = "clsPx"
+        results = run_by_period(ann, price_col=price_col, period_freq=args.period_freq,
+                                start_date=args.start_date, end_date=args.end_date,
+                                match_high_iv=args.match_high_iv, iv_match_threshold=args.iv_threshold)
+        summ = summarize_by_period(results)
+        txt = _format_temporal_txt(results, summ)
+        Path("reports").mkdir(parents=True, exist_ok=True)
+        Path("reports/gate_temporal_stability.txt").write_text(txt, encoding="utf-8")
+        pd.DataFrame(summ["rows"]).to_csv("reports/gate_temporal_stability.csv", index=False)
+        print(txt)
+        print("wrote reports/gate_temporal_stability.{txt,csv}")
+        return results
+
     if args.panel == "orats":
         res = run_test(uni=panel, start_date=args.start_date, pit_ivp=args.pit_ivp,
                        match_high_iv=args.match_high_iv, iv_match_threshold=args.iv_threshold)
