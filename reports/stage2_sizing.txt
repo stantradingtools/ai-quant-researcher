@@ -1,0 +1,56 @@
+==========================================================================================
+STAGE 2 — Risk-Agent sizing: fractional portfolio-Kelly + drawdown kill-switch
+==========================================================================================
+Per Prompt-D: ACCEPT + size-to-survive + kill-switch (NO regime entry gate).
+Position panel: 475,430 fires, 2012-2026, round-trip cost 20 bps. Net per-trade mean mu=+86.5 bps, pooled sigma=16.8%.
+Sizing: fractional Kelly lambda=0.25, constant-corr rho=0.3, caps: per-name<=5% gross<=1.00 net<=0.50; monthly cohort (hold 21d ~= 1mo). Avg monthly book: 2764 names, gross 0.942, net +0.344.
+Kill-switch: de-risk x0.3 when DD<-15%, resume when DD>-7%.
+
+-- SIZED BACKTEST: kill-switch OFF vs ON -----------------------------------------------
+  metric               |         KS OFF |          KS ON
+  ------------------------------------------------------
+  CAGR                 |         +5.75% |         +5.75%
+  Sharpe               |           1.14 |           1.14
+  max drawdown         |         -9.85% |         -9.85%
+  final equity x       |           2.22 |           2.22
+  worst month          | 2020-02 -7.21%  |  2020-02 -7.21%
+  worst year           | 2015 +0.14%  |  2015 +0.14%
+
+-- TAIL PATHS (sized monthly return) ---------------------------------------------------
+  2020 (edge inversion, abs-positive) — KS OFF -> ON:
+    2020-01:    -2.42%  ->     -2.42%
+    2020-02:    -7.21%  ->     -7.21%
+    2020-03:    +0.69%  ->     +0.69%
+    2020-04:    +2.69%  ->     +2.69%
+    2020-05:    +4.78%  ->     +4.78%
+    2020-06:    +0.73%  ->     +0.73%
+    2020-07:    +2.64%  ->     +2.64%
+    2020-08:    +0.29%  ->     +0.29%
+    2020-09:    +0.05%  ->     +0.05%
+    2020-10:    +2.25%  ->     +2.25%
+    2020-11:    +5.39%  ->     +5.39%
+    2020-12:    -1.86%  ->     -1.86%
+  2021-01 (meme squeeze): KS OFF -0.77%  ->  KS ON -0.77%
+  worst UNSIZED book-month (per-trade mean): 2021-01 -9.88% — sizing must make this survivable.
+
+-- KILL-SWITCH EPISODES (ON) -----------------------------------------------------------
+    none triggered at lambda=0.25 (maxDD never reaches the trigger — sizing alone survives).
+
+-- KILL-SWITCH DEMONSTRATION (full-Kelly stress, lambda=1.0, ~4x leverage) --------------
+  Forced to full Kelly so the DD breaches the trigger and the backstop engages:
+    max drawdown : KS OFF -49.61%  ->  KS ON -27.93%   (depth control)
+    CAGR         : KS OFF +31.62%  ->  KS ON +14.90%
+    de-risk 2015-12-31 -> 2016-05-31 (trough DD -18.4%)
+    de-risk 2018-11-30 -> 2019-10-31 (trough DD -23.0%)
+    de-risk 2020-01-31 -> 2020-11-30 (trough DD -27.9%)
+    de-risk 2022-05-31 -> 2023-07-31 (trough DD -19.4%)
+    de-risk 2023-09-30 -> 2024-11-30 (trough DD -15.4%)
+    de-risk 2025-03-31 -> 2026-04-30 (trough DD -24.0%)
+
+-- READOUT ------------------------------------------------------------------------------
+  At the recommended lambda=0.25, SIZING ALONE caps max drawdown at -9.85% — below the 15% kill-switch trigger, so the
+  kill-switch is a NON-BINDING backstop here (KS ON == OFF). 'Size-to-survive' works.
+  The full-Kelly stress demo confirms the backstop functions: maxDD -49.61% -> -27.93% when engaged.
+  2020 stays absolute-positive/survivable (worst 2020 month -7.21% in Feb); the 2021-01 meme-squeeze book-month is bounded by diversification +
+  fractional Kelly (-9.88% per-trade -> -0.77% sized). Neither the sizing nor the
+  kill-switch fixes the 2020 SELECTION miss — that hit is accepted (per Prompt D).
