@@ -35,6 +35,19 @@ HORIZONS = (5, 10, 21)
 # basis-independent headline.
 REALISTIC_RT_BPS = 20.0
 
+# PROJECT SIGNAL WARM-UP CONVENTION: 3 years of ORATS trading days. The first
+# tradeable signal date = panel_start + WARMUP_BDAYS business days, so every
+# percentile / freshness / sigma window has a full 3-year ORATS warm-up behind it.
+# This replaces the ad-hoc 252/504 the refiner chose. Single source of truth —
+# backtest, sizing, regime, verdict, and the paper live-signal loop all use it.
+WARMUP_BDAYS = 756
+WARMUP_START = "2013-11-26"   # = ORATS panel start (2011-01-03) + WARMUP_BDAYS bdays
+
+
+def warmup_start_date(panel_min) -> str:
+    """First tradeable signal date = panel start + WARMUP_BDAYS business days."""
+    return str((pd.Timestamp(panel_min) + pd.offsets.BDay(WARMUP_BDAYS)).date())
+
 
 def _pit_pctl_vec(x, lookback: int = 252, min_obs: int = 126):
     """Strictly-trailing mid-rank percentile (same methodology as putP/callP): rank x[i]

@@ -1,10 +1,10 @@
 {
   "strategy": "skew_consensus_v22_novix",
-  "version": 2,
+  "version": 3,
   "run_mode": "A",
   "status": "validated + sized",
-  "updated_at": "2026-05-25T12:48:48+00:00",
-  "git_commit": "8298d99",
+  "updated_at": "2026-05-25T13:48:12+00:00",
+  "git_commit": "7533d7e",
   "stages": {
     "1_hypothesis": {
       "status": "done",
@@ -23,40 +23,40 @@
     },
     "4_backtest": {
       "status": "done",
-      "updated_at": "2026-05-25T11:48:17+00:00",
-      "note": "Mode-A fires-frame backtest ADAPTER (quant_validator.backtest) now closes the plumbing: wraps signal_vs_random.run_test (single eligibility screen \u2014 de-dup, z back to 9.12) and emits canonical results/ (returns, positions, vs_random, net_return_panel). 475,430 fires, 2012-2026, survivorship-free."
+      "updated_at": "2026-05-25T13:48:12+00:00",
+      "note": "Mode-A fires-frame backtest ADAPTER (quant_validator.backtest) closes the plumbing: wraps signal_vs_random.run_test (single eligibility screen \u2014 de-dup) and emits canonical results/ (returns, positions, vs_random, net_return_panel). 454,798 fires, 2013-2026, survivorship-free. WARM-UP: first fire = panel start + 756 bdays (3yr ORATS, 2013-11-26); standardized from the ad-hoc 252/504 so every percentile/sigma window is fully warmed (dropped ~20.6k 2012+early-2013 fires)."
     },
     "5_stats": {
       "status": "done",
-      "updated_at": "2026-05-25T11:48:17+00:00",
-      "note": "Stats CLI reads the adapter's results/returns.csv. Strategy Sharpe 1.04 (walk-forward fold-mean 1.34, 1 negative fold); Deflated Sharpe p-value 0.0015, prob-real 0.9985 (edge survives deflation for n_trials=3)."
+      "updated_at": "2026-05-25T13:48:12+00:00",
+      "note": "Stats CLI reads the adapter's results/returns.csv. Strategy Sharpe 0.98 (walk-forward fold-mean 1.31, 1 negative fold); Deflated Sharpe p-value 0.006, prob-real 0.994 (edge survives deflation for n_trials=3)."
     },
     "6_vs_random": {
       "status": "pass",
-      "updated_at": "2026-05-25T11:48:17+00:00",
-      "note": "Date/direction-matched random pool, total-return, full survivorship-free universe, from 2012. Single eligibility screen (de-duped via the adapter) -> z back to 9.12, exact parity with the Mode-B reference.",
+      "updated_at": "2026-05-25T13:48:12+00:00",
+      "note": "Date/direction-matched random pool, total-return, full survivorship-free universe, from 2013-11-26 (756-bday / 3yr ORATS warm-up). Single eligibility screen (de-duped via the adapter) -> 21d z 8.87, parity with the Mode-B reference held under the later start (+18.15 vs +18.28 bps; gross +106.96 vs +106.53).",
       "verdict": {
         "5": {
-          "increment": 1.4,
-          "random": 13.5,
-          "gross": 15.0,
-          "z": 1.46,
-          "p": 0.078,
+          "increment": 1.3,
+          "random": 13.0,
+          "gross": 14.3,
+          "z": 1.21,
+          "p": 0.114,
           "beat": 0.51
         },
         "10": {
-          "increment": 5.7,
-          "random": 27.6,
-          "gross": 33.3,
-          "z": 4.06,
+          "increment": 5.1,
+          "random": 26.3,
+          "gross": 31.4,
+          "z": 3.54,
           "p": 0.0005,
           "beat": 0.513
         },
         "21": {
-          "increment": 18.3,
-          "random": 88.3,
-          "gross": 106.5,
-          "z": 9.12,
+          "increment": 18.2,
+          "random": 88.8,
+          "gross": 107.0,
+          "z": 8.87,
           "p": 0.0005,
           "beat": 0.516
         }
@@ -64,392 +64,644 @@
     },
     "7_validator": {
       "status": "pass",
-      "updated_at": "2026-05-25T11:48:17+00:00",
+      "updated_at": "2026-05-25T13:48:12+00:00",
       "note": "Critic-validator 9-criteria + placebo from the prior validation (critique_post.json) now backed by present results/. Standing items are the pre-critic warnings (narrow-corner fragility, long-side survivorship/HTB)."
     },
     "8_gates": {
       "status": "pass",
-      "updated_at": "2026-05-25T11:48:17+00:00",
-      "note": "All gates PASS on the adapter's artifacts: deflated_sharpe (DSR p=0.0015 < 0.95, prob-real 0.9985), correlation (no survivors), pca (single-asset N/A), vs_random (fires-adapter verdict). first_failure null; missing-input now reports not_available, not a spurious fail."
+      "updated_at": "2026-05-25T13:48:12+00:00",
+      "note": "All gates PASS on the adapter's artifacts: deflated_sharpe (DSR p=0.006 < 0.95, prob-real 0.994), correlation (no survivors), pca (single-asset N/A), vs_random (fires-adapter verdict). first_failure null; missing-input now reports not_available, not a spurious fail."
     },
     "9_risk": {
       "status": "pass",
-      "updated_at": "2026-05-25T11:48:17+00:00",
-      "note": "Fractional portfolio Kelly lambda=0.25, constant-corr Sigma (rho 0.30), caps per-name 5% / gross 1.0 / net 0.5; drawdown kill-switch -15%/-7%/x0.30 (NON-binding at lambda=0.25 \u2014 sizing alone survives; proven in a full-Kelly stress, maxDD -49.6%->-27.9%). Risk Agent: 4/10 -> DEPLOY at 0.5x.",
+      "updated_at": "2026-05-25T13:48:12+00:00",
+      "note": "Fractional portfolio Kelly lambda=0.25, constant-corr Sigma (rho 0.30), caps per-name 5% / gross 1.0 / net 0.5; drawdown kill-switch -15%/-7%/x0.30 (NON-binding at lambda=0.25 \u2014 sizing alone survives; proven in a full-Kelly stress, maxDD -49.6%->-27.4%). Risk Agent: 4/10 -> DEPLOY at 0.5x.",
       "metrics": {
-        "CAGR": "+5.75%",
-        "Sharpe": "1.14",
-        "max drawdown": "-9.85%",
-        "final equity": "2.22x (2012-2026)",
-        "worst month": "2020-02 -7.21%",
-        "2021-01 meme squeeze": "-9.88%/trade -> -0.77% sized",
+        "CAGR": "+5.82%",
+        "Sharpe": "1.12",
+        "max drawdown": "-9.86%",
+        "final equity": "2.02x (2013-2026)",
+        "worst month": "2020-02 -7.20%",
+        "2021-01 meme squeeze": "-9.88%/trade -> -0.88% sized",
         "size multiplier": "0.5x"
       },
       "equity_curve": [
         [
-          "2012-01",
-          1.0215
-        ],
-        [
-          "2012-03",
-          1.0264
-        ],
-        [
-          "2012-05",
-          1.0064
-        ],
-        [
-          "2012-07",
-          1.0374
-        ],
-        [
-          "2012-09",
-          1.0568
-        ],
-        [
-          "2012-11",
-          1.0503
-        ],
-        [
-          "2013-01",
-          1.0525
-        ],
-        [
-          "2013-03",
-          1.0579
-        ],
-        [
-          "2013-05",
-          1.0534
-        ],
-        [
-          "2013-07",
-          1.0691
-        ],
-        [
-          "2013-09",
-          1.0794
-        ],
-        [
           "2013-11",
-          1.0989
+          0.9919
+        ],
+        [
+          "2013-12",
+          0.9958
         ],
         [
           "2014-01",
-          1.1045
+          0.9986
+        ],
+        [
+          "2014-02",
+          1.0198
         ],
         [
           "2014-03",
-          1.1266
+          1.0175
+        ],
+        [
+          "2014-04",
+          1.0176
         ],
         [
           "2014-05",
-          1.1349
+          1.0254
+        ],
+        [
+          "2014-06",
+          1.0303
         ],
         [
           "2014-07",
-          1.1299
+          1.0214
+        ],
+        [
+          "2014-08",
+          1.0385
         ],
         [
           "2014-09",
-          1.1426
+          1.0317
+        ],
+        [
+          "2014-10",
+          1.0649
         ],
         [
           "2014-11",
-          1.1794
+          1.0664
+        ],
+        [
+          "2014-12",
+          1.0616
         ],
         [
           "2015-01",
-          1.1902
+          1.0769
+        ],
+        [
+          "2015-02",
+          1.0756
         ],
         [
           "2015-03",
-          1.1973
+          1.0838
+        ],
+        [
+          "2015-04",
+          1.0801
         ],
         [
           "2015-05",
-          1.1876
+          1.0758
+        ],
+        [
+          "2015-06",
+          1.08
         ],
         [
           "2015-07",
-          1.1915
+          1.0777
+        ],
+        [
+          "2015-08",
+          1.0616
         ],
         [
           "2015-09",
-          1.1997
+          1.0841
+        ],
+        [
+          "2015-10",
+          1.1012
         ],
         [
           "2015-11",
-          1.2097
+          1.0937
+        ],
+        [
+          "2015-12",
+          1.063
         ],
         [
           "2016-01",
-          1.1737
+          1.0609
+        ],
+        [
+          "2016-02",
+          1.1024
         ],
         [
           "2016-03",
-          1.235
+          1.1165
+        ],
+        [
+          "2016-04",
+          1.1235
         ],
         [
           "2016-05",
-          1.2678
+          1.1483
+        ],
+        [
+          "2016-06",
+          1.1689
         ],
         [
           "2016-07",
-          1.305
+          1.1846
+        ],
+        [
+          "2016-08",
+          1.1988
         ],
         [
           "2016-09",
-          1.3171
+          1.1944
+        ],
+        [
+          "2016-10",
+          1.2035
         ],
         [
           "2016-11",
-          1.3474
+          1.2249
+        ],
+        [
+          "2016-12",
+          1.2232
         ],
         [
           "2017-01",
-          1.3425
+          1.2221
+        ],
+        [
+          "2017-02",
+          1.2227
         ],
         [
           "2017-03",
-          1.3463
+          1.2254
+        ],
+        [
+          "2017-04",
+          1.2403
         ],
         [
           "2017-05",
-          1.3689
+          1.246
+        ],
+        [
+          "2017-06",
+          1.2461
         ],
         [
           "2017-07",
-          1.369
+          1.245
+        ],
+        [
+          "2017-08",
+          1.2481
         ],
         [
           "2017-09",
-          1.4104
+          1.2833
+        ],
+        [
+          "2017-10",
+          1.2813
         ],
         [
           "2017-11",
-          1.4154
+          1.2874
+        ],
+        [
+          "2017-12",
+          1.2975
         ],
         [
           "2018-01",
-          1.4147
+          1.2866
+        ],
+        [
+          "2018-02",
+          1.3059
         ],
         [
           "2018-03",
-          1.434
+          1.3043
+        ],
+        [
+          "2018-04",
+          1.311
         ],
         [
           "2018-05",
-          1.4447
+          1.3143
+        ],
+        [
+          "2018-06",
+          1.3228
         ],
         [
           "2018-07",
-          1.4597
+          1.3279
+        ],
+        [
+          "2018-08",
+          1.3289
         ],
         [
           "2018-09",
-          1.4323
+          1.3036
+        ],
+        [
+          "2018-10",
+          1.3102
         ],
         [
           "2018-11",
-          1.4021
+          1.2764
+        ],
+        [
+          "2018-12",
+          1.3048
         ],
         [
           "2019-01",
-          1.4919
+          1.358
+        ],
+        [
+          "2019-02",
+          1.3562
         ],
         [
           "2019-03",
-          1.5099
+          1.372
+        ],
+        [
+          "2019-04",
+          1.3725
         ],
         [
           "2019-05",
-          1.5174
+          1.3778
+        ],
+        [
+          "2019-06",
+          1.3965
         ],
         [
           "2019-07",
-          1.5332
+          1.3942
+        ],
+        [
+          "2019-08",
+          1.4124
         ],
         [
           "2019-09",
-          1.5569
+          1.4162
+        ],
+        [
+          "2019-10",
+          1.4481
         ],
         [
           "2019-11",
-          1.5986
+          1.4547
+        ],
+        [
+          "2019-12",
+          1.4477
         ],
         [
           "2020-01",
-          1.5532
+          1.4129
+        ],
+        [
+          "2020-02",
+          1.3112
         ],
         [
           "2020-03",
-          1.4512
+          1.3205
+        ],
+        [
+          "2020-04",
+          1.3561
         ],
         [
           "2020-05",
-          1.5616
+          1.4207
+        ],
+        [
+          "2020-06",
+          1.431
         ],
         [
           "2020-07",
-          1.6145
+          1.4681
+        ],
+        [
+          "2020-08",
+          1.4732
         ],
         [
           "2020-09",
-          1.62
+          1.4739
+        ],
+        [
+          "2020-10",
+          1.5068
         ],
         [
           "2020-11",
-          1.7457
+          1.5868
+        ],
+        [
+          "2020-12",
+          1.5602
         ],
         [
           "2021-01",
-          1.7001
+          1.5464
+        ],
+        [
+          "2021-02",
+          1.5829
         ],
         [
           "2021-03",
-          1.7481
+          1.5905
+        ],
+        [
+          "2021-04",
+          1.5964
         ],
         [
           "2021-05",
-          1.761
+          1.6017
+        ],
+        [
+          "2021-06",
+          1.6183
         ],
         [
           "2021-07",
-          1.7663
+          1.6071
+        ],
+        [
+          "2021-08",
+          1.5976
         ],
         [
           "2021-09",
-          1.787
+          1.6257
+        ],
+        [
+          "2021-10",
+          1.675
         ],
         [
           "2021-11",
-          1.861
+          1.6929
+        ],
+        [
+          "2021-12",
+          1.7146
         ],
         [
           "2022-01",
-          1.8699
+          1.7007
+        ],
+        [
+          "2022-02",
+          1.7042
         ],
         [
           "2022-03",
-          1.8991
+          1.7268
+        ],
+        [
+          "2022-04",
+          1.686
         ],
         [
           "2022-05",
-          1.8375
+          1.671
+        ],
+        [
+          "2022-06",
+          1.691
         ],
         [
           "2022-07",
-          1.915
+          1.7411
+        ],
+        [
+          "2022-08",
+          1.7301
         ],
         [
           "2022-09",
-          1.8976
+          1.7237
+        ],
+        [
+          "2022-10",
+          1.7507
         ],
         [
           "2022-11",
-          1.9199
+          1.7444
+        ],
+        [
+          "2022-12",
+          1.7415
         ],
         [
           "2023-01",
-          1.9421
+          1.7645
+        ],
+        [
+          "2023-02",
+          1.7656
         ],
         [
           "2023-03",
-          1.9699
+          1.7905
+        ],
+        [
+          "2023-04",
+          1.7767
         ],
         [
           "2023-05",
-          1.9786
+          1.799
+        ],
+        [
+          "2023-06",
+          1.7944
         ],
         [
           "2023-07",
-          1.9974
+          1.8167
+        ],
+        [
+          "2023-08",
+          1.8053
         ],
         [
           "2023-09",
-          1.9663
+          1.7883
+        ],
+        [
+          "2023-10",
+          1.8161
         ],
         [
           "2023-11",
-          2.0085
+          1.8255
+        ],
+        [
+          "2023-12",
+          1.8253
         ],
         [
           "2024-01",
-          2.0008
+          1.8188
+        ],
+        [
+          "2024-02",
+          1.814
         ],
         [
           "2024-03",
-          1.987
+          1.8052
+        ],
+        [
+          "2024-04",
+          1.8302
         ],
         [
           "2024-05",
-          2.0151
+          1.8302
+        ],
+        [
+          "2024-06",
+          1.8047
         ],
         [
           "2024-07",
-          1.9866
+          1.8042
+        ],
+        [
+          "2024-08",
+          1.8334
         ],
         [
           "2024-09",
-          2.0543
+          1.8658
+        ],
+        [
+          "2024-10",
+          1.8816
         ],
         [
           "2024-11",
-          2.0828
+          1.8925
+        ],
+        [
+          "2024-12",
+          1.9044
         ],
         [
           "2025-01",
-          2.1185
+          1.9252
+        ],
+        [
+          "2025-02",
+          1.8923
         ],
         [
           "2025-03",
-          2.0269
+          1.8418
+        ],
+        [
+          "2025-04",
+          1.8927
         ],
         [
           "2025-05",
-          2.1186
+          1.9253
+        ],
+        [
+          "2025-06",
+          1.9382
         ],
         [
           "2025-07",
-          2.1474
+          1.9521
+        ],
+        [
+          "2025-08",
+          1.9748
         ],
         [
           "2025-09",
-          2.1651
+          1.9689
+        ],
+        [
+          "2025-10",
+          1.9544
         ],
         [
           "2025-11",
-          2.1824
+          1.9852
+        ],
+        [
+          "2025-12",
+          1.9892
         ],
         [
           "2026-01",
-          2.1931
+          1.9947
+        ],
+        [
+          "2026-02",
+          1.9607
         ],
         [
           "2026-03",
-          2.1868
+          1.9889
         ],
         [
           "2026-04",
-          2.218
+          2.0173
         ]
       ]
     },
     "10_memory": {
       "status": "done",
-      "updated_at": "2026-05-25T11:48:17+00:00",
+      "updated_at": "2026-05-25T13:48:12+00:00",
       "note": "Trial recorded. Decision: ACCEPT (validated + sized) -> deploy 0.5x; paper phase pending. Residual: 2020 selection miss accepted (no robust gate)."
     }
   },
   "robustness": {
     "status": "done",
-    "updated_at": "2026-05-25T11:48:17+00:00",
+    "updated_at": "2026-05-25T13:48:12+00:00",
     "cost": {
       "breakeven": {
-        "5": 15.0,
-        "10": 33.3,
-        "21": 106.5
+        "5": 14.3,
+        "10": 31.4,
+        "21": 107.0
       },
       "realistic_bps": 20,
       "note": "Equity round-trip breakeven; 5d dies (<20 bps), 21d has a big cushion. Edge (vs random) is cost-invariant; absolute profitability is the binding constraint."
@@ -457,12 +709,8 @@
     "temporal": {
       "per_year": [
         [
-          2012,
-          10.4
-        ],
-        [
           2013,
-          28.7
+          56.7
         ],
         [
           2014,
@@ -517,7 +765,7 @@
           -24.8
         ]
       ],
-      "note": "regime-concentrated \u2014 flagged years [2012, 2016, 2017, 2020, 2022, 2026]; 2020 inverts (-41.9 bps, z -5.06); 9/15 years strongly positive."
+      "note": "regime-concentrated \u2014 flagged years [2016, 2017, 2020, 2022, 2026]; 2020 inverts (-41.9 bps, z -5.06); 12/14 years positive. 756-bday warm-up drops 2012; 2013 partial (Nov-Dec)."
     },
     "regime": {
       "note": "ACCEPT + size-to-survive + drawdown kill-switch; NO ex-ante regime entry gate (n=1; the tested vol gate BACKFIRED \u2014 worsened 2020 and discarded +294 bps/trade of profit)."

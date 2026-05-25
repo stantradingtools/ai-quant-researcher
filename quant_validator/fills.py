@@ -35,7 +35,14 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
+from .signal_vs_random import WARMUP_BDAYS
+
 HOLD_BDAYS = 21
+# Live signal warm-up: for each next signal date, the live signal is computed off the
+# trailing WARMUP_BDAYS (756 = 3yr) ORATS window — the SAME convention as the backtest,
+# so the paper signal matches what was validated. (The demo book below reads the
+# already-warmed clean panel; the production live-compute path slices the trailing 756.)
+LIVE_SIGNAL_WARMUP_BDAYS = WARMUP_BDAYS
 REPORTS = pathlib.Path("reports")
 
 

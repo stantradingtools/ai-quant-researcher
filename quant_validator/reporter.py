@@ -292,8 +292,10 @@ def backfill_v22(strategy: str = "skew_consensus_v22_novix") -> dict:
         t = t[t["horizon"] == 21]
         per_year = [[int(r.year), round(float(r.increment_bps), 1)] for r in t.itertuples()]
         flagged = [int(r.year) for r in t.itertuples() if bool(r.year_flagged)]
+        n_pos = int((t["increment_bps"] > 0).sum())
         temp_note = (f"regime-concentrated — flagged years {flagged}; 2020 inverts "
-                     "(-41.9 bps, z -5.06); 9/15 years strongly positive.")
+                     f"(-41.9 bps, z -5.06); {n_pos}/{len(t)} years positive. 756-bday warm-up "
+                     "drops 2012; 2013 partial (Nov-Dec).")
     # sized monthly equity curve (downsample for the SVG)
     equity = []
     ecsv = Path("data/av/sized_equity_curve.csv")
@@ -306,7 +308,7 @@ def backfill_v22(strategy: str = "skew_consensus_v22_novix") -> dict:
             equity.append([str(e.iloc[-1].date)[:7], round(float(e.iloc[-1].equity_ks_off), 4)])
 
     rep = {
-        "strategy": strategy, "version": 2, "run_mode": "A",
+        "strategy": strategy, "version": 3, "run_mode": "A",
         "status": "validated + sized",
         "updated_at": now, "git_commit": _git_sha(),
         "stages": {
@@ -322,39 +324,42 @@ def backfill_v22(strategy: str = "skew_consensus_v22_novix") -> dict:
                         "100% fire-side fidelity vs compute_consensus (0 disagreements); reproduced "
                         "the Mode-B verdict. Reference module untouched."},
             "4_backtest": {"status": "done", "updated_at": now,
-                "note": "Mode-A fires-frame backtest ADAPTER (quant_validator.backtest) now closes the "
-                        "plumbing: wraps signal_vs_random.run_test (single eligibility screen — de-dup, "
-                        "z back to 9.12) and emits canonical results/ (returns, positions, vs_random, "
-                        "net_return_panel). 475,430 fires, 2012-2026, survivorship-free."},
+                "note": "Mode-A fires-frame backtest ADAPTER (quant_validator.backtest) closes the "
+                        "plumbing: wraps signal_vs_random.run_test (single eligibility screen — de-dup) "
+                        "and emits canonical results/ (returns, positions, vs_random, net_return_panel). "
+                        "454,798 fires, 2013-2026, survivorship-free. WARM-UP: first fire = panel start "
+                        "+ 756 bdays (3yr ORATS, 2013-11-26); standardized from the ad-hoc 252/504 so "
+                        "every percentile/sigma window is fully warmed (dropped ~20.6k 2012+early-2013 fires)."},
             "5_stats": {"status": "done", "updated_at": now,
-                "note": "Stats CLI reads the adapter's results/returns.csv. Strategy Sharpe 1.04 "
-                        "(walk-forward fold-mean 1.34, 1 negative fold); Deflated Sharpe p-value "
-                        "0.0015, prob-real 0.9985 (edge survives deflation for n_trials=3)."},
+                "note": "Stats CLI reads the adapter's results/returns.csv. Strategy Sharpe 0.98 "
+                        "(walk-forward fold-mean 1.31, 1 negative fold); Deflated Sharpe p-value "
+                        "0.006, prob-real 0.994 (edge survives deflation for n_trials=3)."},
             "6_vs_random": {"status": "pass", "updated_at": now,
                 "note": "Date/direction-matched random pool, total-return, full survivorship-free "
-                        "universe, from 2012. Single eligibility screen (de-duped via the adapter) -> "
-                        "z back to 9.12, exact parity with the Mode-B reference.",
+                        "universe, from 2013-11-26 (756-bday / 3yr ORATS warm-up). Single eligibility "
+                        "screen (de-duped via the adapter) -> 21d z 8.87, parity with the Mode-B "
+                        "reference held under the later start (+18.15 vs +18.28 bps; gross +106.96 vs +106.53).",
                 "verdict": {
-                    "5":  {"increment": 1.4, "random": 13.5, "gross": 15.0, "z": 1.46, "p": 0.078, "beat": 0.510},
-                    "10": {"increment": 5.7, "random": 27.6, "gross": 33.3, "z": 4.06, "p": 0.0005, "beat": 0.513},
-                    "21": {"increment": 18.3, "random": 88.3, "gross": 106.5, "z": 9.12, "p": 0.0005, "beat": 0.516}}},
+                    "5":  {"increment": 1.3, "random": 13.0, "gross": 14.3, "z": 1.21, "p": 0.114, "beat": 0.510},
+                    "10": {"increment": 5.1, "random": 26.3, "gross": 31.4, "z": 3.54, "p": 0.0005, "beat": 0.513},
+                    "21": {"increment": 18.2, "random": 88.8, "gross": 107.0, "z": 8.87, "p": 0.0005, "beat": 0.516}}},
             "7_validator": {"status": "pass", "updated_at": now,
                 "note": "Critic-validator 9-criteria + placebo from the prior validation "
                         "(critique_post.json) now backed by present results/. Standing items are the "
                         "pre-critic warnings (narrow-corner fragility, long-side survivorship/HTB)."},
             "8_gates": {"status": "pass", "updated_at": now,
-                "note": "All gates PASS on the adapter's artifacts: deflated_sharpe (DSR p=0.0015 < 0.95, "
-                        "prob-real 0.9985), correlation (no survivors), pca (single-asset N/A), vs_random "
+                "note": "All gates PASS on the adapter's artifacts: deflated_sharpe (DSR p=0.006 < 0.95, "
+                        "prob-real 0.994), correlation (no survivors), pca (single-asset N/A), vs_random "
                         "(fires-adapter verdict). first_failure null; missing-input now reports "
                         "not_available, not a spurious fail."},
             "9_risk": {"status": "pass", "updated_at": now,
                 "note": "Fractional portfolio Kelly lambda=0.25, constant-corr Sigma (rho 0.30), caps "
                         "per-name 5% / gross 1.0 / net 0.5; drawdown kill-switch -15%/-7%/x0.30 "
                         "(NON-binding at lambda=0.25 — sizing alone survives; proven in a full-Kelly "
-                        "stress, maxDD -49.6%->-27.9%). Risk Agent: 4/10 -> DEPLOY at 0.5x.",
-                "metrics": {"CAGR": "+5.75%", "Sharpe": "1.14", "max drawdown": "-9.85%",
-                            "final equity": "2.22x (2012-2026)", "worst month": "2020-02 -7.21%",
-                            "2021-01 meme squeeze": "-9.88%/trade -> -0.77% sized",
+                        "stress, maxDD -49.6%->-27.4%). Risk Agent: 4/10 -> DEPLOY at 0.5x.",
+                "metrics": {"CAGR": "+5.82%", "Sharpe": "1.12", "max drawdown": "-9.86%",
+                            "final equity": "2.02x (2013-2026)", "worst month": "2020-02 -7.20%",
+                            "2021-01 meme squeeze": "-9.88%/trade -> -0.88% sized",
                             "size multiplier": "0.5x"},
                 "equity_curve": equity},
             "10_memory": {"status": "done", "updated_at": now,
@@ -362,7 +367,7 @@ def backfill_v22(strategy: str = "skew_consensus_v22_novix") -> dict:
                         "paper phase pending. Residual: 2020 selection miss accepted (no robust gate)."}},
         "robustness": {
             "status": "done", "updated_at": now,
-            "cost": {"breakeven": {"5": 15.0, "10": 33.3, "21": 106.5}, "realistic_bps": 20,
+            "cost": {"breakeven": {"5": 14.3, "10": 31.4, "21": 107.0}, "realistic_bps": 20,
                      "note": "Equity round-trip breakeven; 5d dies (<20 bps), 21d has a big cushion. "
                              "Edge (vs random) is cost-invariant; absolute profitability is the binding constraint."},
             "temporal": {"per_year": per_year, "note": temp_note},

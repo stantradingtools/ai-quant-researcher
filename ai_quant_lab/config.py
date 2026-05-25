@@ -56,6 +56,14 @@ class Settings(BaseModel):
         ge=1,
     )
 
+    # Signal warm-up: trailing trading days of ORATS history required before the first
+    # tradeable signal (so every percentile/freshness/sigma window is well-formed).
+    # Project convention = 3 years (756 bdays), replacing the ad-hoc 252/504.
+    warmup_bdays: int = Field(
+        default_factory=lambda: int(_read_env("AI_QUANT_LAB_WARMUP_BDAYS", "756")),
+        ge=1,
+    )
+
     memory_db: Path = Field(
         default_factory=lambda: Path(_read_env("AI_QUANT_LAB_MEMORY_DB", "./memory.db")),
     )

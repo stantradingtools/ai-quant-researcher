@@ -32,19 +32,22 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .signal_vs_random import HORIZONS, annotate_clean, clean_run_columns, run_test
+from .signal_vs_random import (HORIZONS, annotate_clean, clean_run_columns, run_test,
+                               warmup_start_date)
 from .sizing import build_position_panel
 
 CLEAN_PANEL = Path("data/av/signal_panel_clean.parquet")
-START = "2012-01-01"
 ANN = 252
 
 
-def run(thesis_id: str, panel_path: Path = CLEAN_PANEL, start: str = START,
+def run(thesis_id: str, panel_path: Path = CLEAN_PANEL, start: str | None = None,
         cost_bps: float = 20.0, n_boot: int = 2000) -> dict:
     res_dir = Path(f"theses/{thesis_id}/results")
     res_dir.mkdir(parents=True, exist_ok=True)
     panel = pd.read_parquet(panel_path, columns=clean_run_columns())
+    # Project warm-up convention: first tradeable signal = panel_start + 756 bdays (3yr ORATS).
+    if start is None:
+        start = warmup_start_date(panel["tradeDate"].min())
 
     # 1) VERDICT — single screen via run_test (de-duped). The clean panel's `side` is
     #    the RAW consensus (== the generated strategy's fires, byte-identical pre-screen),

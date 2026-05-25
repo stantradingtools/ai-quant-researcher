@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .signal_vs_random import (HORIZONS, annotate_clean, run_test,
+from .signal_vs_random import (HORIZONS, WARMUP_START, annotate_clean, run_test,
                                survivor_tickers_from_map)
 
 CLEAN_PANEL = Path("data/av/signal_panel_clean.parquet")
@@ -34,7 +34,7 @@ REPORT_DIR = Path("reports")
 REPORT_TXT = REPORT_DIR / "step2_verdict_rerun.txt"
 REPORT_CSV = REPORT_DIR / "step2_verdict_rerun.csv"
 
-START = "2012-01-01"            # match the original reference window (excl. 2011 warmup)
+START = WARMUP_START           # 3yr / 756-bday ORATS warm-up convention (panel_start+756)
 REF_21D_INCREMENT = 0.0022607   # original ORATS reference: 22.6 bps (svr_verdict_clip.json)
 MEANINGFUL_FLOOR = 0.0010       # 10 bps — below this the 21d edge is "collapsed"
 SURV_FLAG_BPS = 0.0005          # active-minus-full > 5 bps => survivorship-inflated

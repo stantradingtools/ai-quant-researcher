@@ -41,14 +41,14 @@ import numpy as np
 import pandas as pd
 
 from .consensus_signal import signal_sign
-from .signal_vs_random import annotate_clean, clean_run_columns, run_by_period
+from .signal_vs_random import WARMUP_START, annotate_clean, clean_run_columns, run_by_period
 
 CLEAN_PANEL = Path("data/av/signal_panel_clean.parquet")
 SPY_PARQUET = Path("data/av/daily_adjusted/SPY.parquet")
 REPORT_TXT = Path("reports/regime_diagnosis_2020.txt")
 REPORT_CSV = Path("reports/regime_diagnosis_2020.csv")
 
-START = "2012-01-01"
+START = WARMUP_START          # 3yr / 756-bday ORATS warm-up convention
 PRICE_FLOOR, MAX_ABS_FWD = 1.0, 5.0
 FEATURES = ["ret_21d", "ret_63d", "rvol_21d", "dd_252", "rebound_off_low63", "vol_chg_21"]
 WINNER_YEARS = (2019, 2021, 2023)

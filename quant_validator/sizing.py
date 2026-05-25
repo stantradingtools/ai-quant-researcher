@@ -40,14 +40,14 @@ import numpy as np
 import pandas as pd
 
 from .consensus_signal import signal_sign
-from .signal_vs_random import clean_run_columns
+from .signal_vs_random import WARMUP_START, clean_run_columns
 
 CLEAN_PANEL = Path("data/av/signal_panel_clean.parquet")
 REPORT_TXT = Path("reports/stage2_sizing.txt")
 REPORT_CSV = Path("reports/stage2_sizing.csv")
 EQUITY_CSV = Path("data/av/sized_equity_curve.csv")
 
-START = "2012-01-01"
+START = WARMUP_START          # 3yr / 756-bday ORATS warm-up convention (panel_start+756)
 HORIZON = 21                  # trading-day hold = deploy horizon (5d dead, 10d thin)
 PRICE_FLOOR, MAX_ABS_FWD = 1.0, 5.0
 

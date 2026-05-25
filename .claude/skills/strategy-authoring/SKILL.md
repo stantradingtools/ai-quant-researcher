@@ -75,6 +75,25 @@ spec's `hi/lo` (default **75 / 25**). Apply the spec's `freshness` window (defau
 a feature value older than `freshness` days is stale — do not fire on it. Match the
 reference percentile method bit-for-bit; off-by-one ranking changes which trades fire.
 
+### signal warm-up — 3 years / 756 trading days (PROJECT CONVENTION)
+The first tradeable signal date = **panel start + `WARMUP_BDAYS` (756) business days**.
+No fire may occur before that date, so every percentile / freshness / `sigma` / `skewDelta`
+window has a full **3 years** of ORATS history behind it. This is a single source of truth:
+`WARMUP_BDAYS = 756` and `WARMUP_START` (= ORATS panel start `2011-01-03` + 756 bdays =
+`2013-11-26`) live in `quant_validator/signal_vs_random.py`; `ai_quant_lab.config.settings.warmup_bdays`
+mirrors it (env `AI_QUANT_LAB_WARMUP_BDAYS`). It replaces the ad-hoc 252/504 a refiner may
+propose — **do not** let a spec's `warm_up_buffer` override it downward.
+
+- **Backtest / Mode-A adapter:** compute the start with `warmup_start_date(panel["tradeDate"].min())`
+  when no explicit `start` is passed; never hard-code a calendar date.
+- **Paper live-signal loop:** computing the signal for the next session uses the **trailing
+  756-bday ORATS window** ending at that session — same look-back as the backtest, so live and
+  historical fires are constructed identically (`fills.LIVE_SIGNAL_WARMUP_BDAYS`).
+- Moving the warm-up later drops the earliest fires (≈2012 + most of 2013, ~4–5% of fires for
+  the skew consensus). The verdict must stay materially unchanged — those early fires sat near
+  the pooled average, so the 21d increment holds (~+18.3 bps / gross +106.5). If it moves a lot,
+  the early years were carrying the edge and that is a finding, not a warm-up tweak.
+
 ### forward returns
 Compute close-to-close, on a **trading-day** offset **within each symbol's own sorted
 series**:
@@ -194,8 +213,10 @@ The ORATS adapter took four debug rounds for exactly these — design against th
 2. `sigma` (pop-var, strictly-prior, 3dp) and `skewDelta` (2dp) exact.
 3. Percentiles + `freshness` match the reference method; no off-by-one.
 4. Forward returns close-to-close, trading-day offset, `NaN` (not filled) at the tail.
-5. Price screen on `raw_close`; `max_abs_fwd` symmetric.
-6. No look-ahead; PIT-safe; survivorship-free universe.
-7. Code quarantined; reference module untouched.
-8. A known anchor reproduced; if a reference verdict exists, it matches.
-9. No regime/VIX alpha gate baked in; tail control left to the Risk Agent.
+5. Warm-up honored: first fire >= panel start + 756 bdays (`warmup_start_date`); spec's
+   `warm_up_buffer` not allowed to shorten it. Live loop uses the trailing 756-bday window.
+6. Price screen on `raw_close`; `max_abs_fwd` symmetric.
+7. No look-ahead; PIT-safe; survivorship-free universe.
+8. Code quarantined; reference module untouched.
+9. A known anchor reproduced; if a reference verdict exists, it matches.
+10. No regime/VIX alpha gate baked in; tail control left to the Risk Agent.
