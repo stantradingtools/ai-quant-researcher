@@ -1,0 +1,536 @@
+{
+  "strategy": "skew_consensus_v22_novix",
+  "version": 1,
+  "run_mode": "A",
+  "status": "validated + sized \u2014 Mode-A plumbing + paper pending",
+  "updated_at": "2026-05-25T11:19:46+00:00",
+  "git_commit": "7c343cb",
+  "stages": {
+    "1_hypothesis": {
+      "status": "done",
+      "updated_at": "2026-05-25T11:19:46+00:00",
+      "note": "Economic-only prose -> refined spec. Parity A: spec EMERGED to a full match of the consensus reference (M1 75/25 skew corner, M2 IV x RR, M3 stall/divergence; freshness 3, sigma 1.0; earnings + short-trend ON, VIX off)."
+    },
+    "2_pre_critic": {
+      "status": "pass",
+      "updated_at": "2026-05-25T11:19:46+00:00",
+      "note": "PASS with warnings: narrow-corner fragility, M3 exhaustion look-ahead, long-side survivorship/HTB, cost realism, 75/25 threshold non-stationarity."
+    },
+    "3_code": {
+      "status": "pass",
+      "updated_at": "2026-05-25T11:19:46+00:00",
+      "note": "Coder generated quarantined generated/strategy_skew_modeA.py from the spec; 100% fire-side fidelity vs compute_consensus (0 disagreements); reproduced the Mode-B verdict. Reference module untouched."
+    },
+    "4_backtest": {
+      "status": "flagged",
+      "updated_at": "2026-05-25T11:19:46+00:00",
+      "note": "475,430 fires, 2012-2026, survivorship-free panel. Run via the consensus harness (signal_vs_random); the generic Stage-4/5 plumbing (quant_validator.backtest/sandbox) is MISSING \u2014 Mode-A adapter pending."
+    },
+    "5_stats": {
+      "status": "pending",
+      "updated_at": "2026-05-25T11:19:46+00:00",
+      "note": "Generic stats CLI needs results/returns.csv (the positions x returns shape); panel strategy is a fires frame -> Mode-A plumbing gap. Sized stats in stage 9."
+    },
+    "6_vs_random": {
+      "status": "pass",
+      "updated_at": "2026-05-25T11:19:46+00:00",
+      "note": "Date/direction-matched random pool, total-return, full survivorship-free universe, from 2012.",
+      "verdict": {
+        "5": {
+          "increment": 1.4,
+          "random": 13.5,
+          "gross": 15.0,
+          "z": 1.4,
+          "p": 0.078,
+          "beat": 0.51
+        },
+        "10": {
+          "increment": 5.9,
+          "random": 27.6,
+          "gross": 33.5,
+          "z": 4.18,
+          "p": 0.0005,
+          "beat": 0.513
+        },
+        "21": {
+          "increment": 18.3,
+          "random": 88.3,
+          "gross": 106.6,
+          "z": 8.98,
+          "p": 0.0005,
+          "beat": 0.516
+        }
+      }
+    },
+    "7_validator": {
+      "status": "pending",
+      "updated_at": "2026-05-25T11:19:46+00:00",
+      "note": "Critic-validator (9-criteria) not yet run end-to-end (Mode-A plumbing); pre-critic warnings stand as the open items."
+    },
+    "8_gates": {
+      "status": "flagged",
+      "updated_at": "2026-05-25T11:19:46+00:00",
+      "note": "gates evaluate ran but on degenerate inputs (first_failure: deflated_sharpe) because no results/returns.csv exists yet \u2014 needs the Mode-A backtest adapter."
+    },
+    "9_risk": {
+      "status": "pass",
+      "updated_at": "2026-05-25T11:19:46+00:00",
+      "note": "Fractional portfolio Kelly lambda=0.25, constant-corr Sigma (rho 0.30), caps per-name 5% / gross 1.0 / net 0.5; drawdown kill-switch -15%/-7%/x0.30 (NON-binding at lambda=0.25 \u2014 sizing alone survives; proven in a full-Kelly stress, maxDD -49.6%->-27.9%). Risk Agent: 4/10 -> DEPLOY at 0.5x.",
+      "metrics": {
+        "CAGR": "+5.75%",
+        "Sharpe": "1.14",
+        "max drawdown": "-9.85%",
+        "final equity": "2.22x (2012-2026)",
+        "worst month": "2020-02 -7.21%",
+        "2021-01 meme squeeze": "-9.88%/trade -> -0.77% sized",
+        "size multiplier": "0.5x"
+      },
+      "equity_curve": [
+        [
+          "2012-01",
+          1.0215
+        ],
+        [
+          "2012-03",
+          1.0264
+        ],
+        [
+          "2012-05",
+          1.0064
+        ],
+        [
+          "2012-07",
+          1.0374
+        ],
+        [
+          "2012-09",
+          1.0568
+        ],
+        [
+          "2012-11",
+          1.0503
+        ],
+        [
+          "2013-01",
+          1.0525
+        ],
+        [
+          "2013-03",
+          1.0579
+        ],
+        [
+          "2013-05",
+          1.0534
+        ],
+        [
+          "2013-07",
+          1.0691
+        ],
+        [
+          "2013-09",
+          1.0794
+        ],
+        [
+          "2013-11",
+          1.0989
+        ],
+        [
+          "2014-01",
+          1.1045
+        ],
+        [
+          "2014-03",
+          1.1266
+        ],
+        [
+          "2014-05",
+          1.1349
+        ],
+        [
+          "2014-07",
+          1.1299
+        ],
+        [
+          "2014-09",
+          1.1426
+        ],
+        [
+          "2014-11",
+          1.1794
+        ],
+        [
+          "2015-01",
+          1.1902
+        ],
+        [
+          "2015-03",
+          1.1973
+        ],
+        [
+          "2015-05",
+          1.1876
+        ],
+        [
+          "2015-07",
+          1.1915
+        ],
+        [
+          "2015-09",
+          1.1997
+        ],
+        [
+          "2015-11",
+          1.2097
+        ],
+        [
+          "2016-01",
+          1.1737
+        ],
+        [
+          "2016-03",
+          1.235
+        ],
+        [
+          "2016-05",
+          1.2678
+        ],
+        [
+          "2016-07",
+          1.305
+        ],
+        [
+          "2016-09",
+          1.3171
+        ],
+        [
+          "2016-11",
+          1.3474
+        ],
+        [
+          "2017-01",
+          1.3425
+        ],
+        [
+          "2017-03",
+          1.3463
+        ],
+        [
+          "2017-05",
+          1.3689
+        ],
+        [
+          "2017-07",
+          1.369
+        ],
+        [
+          "2017-09",
+          1.4104
+        ],
+        [
+          "2017-11",
+          1.4154
+        ],
+        [
+          "2018-01",
+          1.4147
+        ],
+        [
+          "2018-03",
+          1.434
+        ],
+        [
+          "2018-05",
+          1.4447
+        ],
+        [
+          "2018-07",
+          1.4597
+        ],
+        [
+          "2018-09",
+          1.4323
+        ],
+        [
+          "2018-11",
+          1.4021
+        ],
+        [
+          "2019-01",
+          1.4919
+        ],
+        [
+          "2019-03",
+          1.5099
+        ],
+        [
+          "2019-05",
+          1.5174
+        ],
+        [
+          "2019-07",
+          1.5332
+        ],
+        [
+          "2019-09",
+          1.5569
+        ],
+        [
+          "2019-11",
+          1.5986
+        ],
+        [
+          "2020-01",
+          1.5532
+        ],
+        [
+          "2020-03",
+          1.4512
+        ],
+        [
+          "2020-05",
+          1.5616
+        ],
+        [
+          "2020-07",
+          1.6145
+        ],
+        [
+          "2020-09",
+          1.62
+        ],
+        [
+          "2020-11",
+          1.7457
+        ],
+        [
+          "2021-01",
+          1.7001
+        ],
+        [
+          "2021-03",
+          1.7481
+        ],
+        [
+          "2021-05",
+          1.761
+        ],
+        [
+          "2021-07",
+          1.7663
+        ],
+        [
+          "2021-09",
+          1.787
+        ],
+        [
+          "2021-11",
+          1.861
+        ],
+        [
+          "2022-01",
+          1.8699
+        ],
+        [
+          "2022-03",
+          1.8991
+        ],
+        [
+          "2022-05",
+          1.8375
+        ],
+        [
+          "2022-07",
+          1.915
+        ],
+        [
+          "2022-09",
+          1.8976
+        ],
+        [
+          "2022-11",
+          1.9199
+        ],
+        [
+          "2023-01",
+          1.9421
+        ],
+        [
+          "2023-03",
+          1.9699
+        ],
+        [
+          "2023-05",
+          1.9786
+        ],
+        [
+          "2023-07",
+          1.9974
+        ],
+        [
+          "2023-09",
+          1.9663
+        ],
+        [
+          "2023-11",
+          2.0085
+        ],
+        [
+          "2024-01",
+          2.0008
+        ],
+        [
+          "2024-03",
+          1.987
+        ],
+        [
+          "2024-05",
+          2.0151
+        ],
+        [
+          "2024-07",
+          1.9866
+        ],
+        [
+          "2024-09",
+          2.0543
+        ],
+        [
+          "2024-11",
+          2.0828
+        ],
+        [
+          "2025-01",
+          2.1185
+        ],
+        [
+          "2025-03",
+          2.0269
+        ],
+        [
+          "2025-05",
+          2.1186
+        ],
+        [
+          "2025-07",
+          2.1474
+        ],
+        [
+          "2025-09",
+          2.1651
+        ],
+        [
+          "2025-11",
+          2.1824
+        ],
+        [
+          "2026-01",
+          2.1931
+        ],
+        [
+          "2026-03",
+          2.1868
+        ],
+        [
+          "2026-04",
+          2.218
+        ]
+      ]
+    },
+    "10_memory": {
+      "status": "done",
+      "updated_at": "2026-05-25T11:19:46+00:00",
+      "note": "Trial recorded. Decision: ACCEPT (validated + sized) -> deploy 0.5x; paper phase pending. Residual: 2020 selection miss accepted (no robust gate)."
+    }
+  },
+  "robustness": {
+    "status": "done",
+    "updated_at": "2026-05-25T11:19:46+00:00",
+    "cost": {
+      "breakeven": {
+        "5": 15.0,
+        "10": 33.3,
+        "21": 106.5
+      },
+      "realistic_bps": 20,
+      "note": "Equity round-trip breakeven; 5d dies (<20 bps), 21d has a big cushion. Edge (vs random) is cost-invariant; absolute profitability is the binding constraint."
+    },
+    "temporal": {
+      "per_year": [
+        [
+          2012,
+          10.4
+        ],
+        [
+          2013,
+          28.7
+        ],
+        [
+          2014,
+          20.8
+        ],
+        [
+          2015,
+          22.0
+        ],
+        [
+          2016,
+          5.3
+        ],
+        [
+          2017,
+          4.5
+        ],
+        [
+          2018,
+          14.7
+        ],
+        [
+          2019,
+          88.0
+        ],
+        [
+          2020,
+          -41.9
+        ],
+        [
+          2021,
+          109.1
+        ],
+        [
+          2022,
+          2.4
+        ],
+        [
+          2023,
+          83.0
+        ],
+        [
+          2024,
+          23.3
+        ],
+        [
+          2025,
+          34.3
+        ],
+        [
+          2026,
+          -24.8
+        ]
+      ],
+      "note": "regime-concentrated \u2014 flagged years [2012, 2016, 2017, 2020, 2022, 2026]; 2020 inverts (-41.9 bps, z -5.06); 9/15 years strongly positive."
+    },
+    "regime": {
+      "note": "ACCEPT + size-to-survive + drawdown kill-switch; NO ex-ante regime entry gate (n=1; the tested vol gate BACKFIRED \u2014 worsened 2020 and discarded +294 bps/trade of profit)."
+    }
+  },
+  "phases": {
+    "4_paper": {
+      "status": "not_started",
+      "note": "(promote via deploy when ready)"
+    },
+    "5_live": {
+      "status": "not_started",
+      "note": ""
+    }
+  }
+}
