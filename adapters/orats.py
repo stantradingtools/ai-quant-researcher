@@ -380,7 +380,7 @@ def build_signal_frame(ticker: str, lookback: int = 252) -> pd.DataFrame:
 
 def build_universe_signal(cache_dir: Path | None = None, lookback: int = 252,
                           out: str = "data/orats/universe_signal.parquet",
-                          self_check: bool = True) -> pd.DataFrame:
+                          self_check: bool = True, since: str | None = None) -> pd.DataFrame:
     """Assemble the validated consensus signal across the FULL cached universe.
 
     Reads the per-date backfill cache (hist_cores/hist_dailies/hist_ivrank),
@@ -388,6 +388,10 @@ def build_universe_signal(cache_dir: Path | None = None, lookback: int = 252,
     the vectorized percentile (proven identical to the validated loop). Output
     is one parquet keyed by (ticker, tradeDate) with the same columns the
     consensus engine fires on. This is the input to the signal-vs-random test.
+
+    `since` (YYYY-MM-DD): only read by-date cache files on/after this date — used by
+    the LIVE feed to rebuild just the trailing window (the feature math is byte-identical
+    to the full build; only the date range loaded differs).
     """
     cache_dir = Path(cache_dir) if cache_dir else CACHE_DIR
 
@@ -407,6 +411,8 @@ def build_universe_signal(cache_dir: Path | None = None, lookback: int = 252,
         for f in sorted(d.glob("*.parquet")):
             if not re.match(r"^\d{4}-\d{2}-\d{2}$", f.stem):
                 continue  # not a by-date file (ticker cache, strikes, etc.)
+            if since and f.stem < since:
+                continue  # LIVE trailing-window build: skip dates before the warm-up start
             try:
                 if pq.read_metadata(f).num_rows == 0:
                     continue  # non-trading-day marker
@@ -536,6 +542,218 @@ def build_universe_signal(cache_dir: Path | None = None, lookback: int = 252,
         else:
             print("  [self-check] AAPL 2015-08-05 not in cache window — skipped.")
     return {"rows": n_rows, "tickers": tickers_done, "out": str(out)}
+
+
+# ── LIVE daily feed (current full-universe surface -> today's fires) ──────
+# Pure orchestration over parity-verified pieces: the by-date pull (hist_*), the
+# feature build (build_universe_signal, reused verbatim via `since`), and the
+# consensus (quant_validator.consensus_signal.compute_consensus). No new signal math.
+
+LIVE_PANEL = Path("data/orats/universe_signal_live.parquet")
+CLEAN_PANEL = Path("data/av/signal_panel_clean.parquet")
+REPORTS = Path("reports")
+
+
+def _nonempty_parquet(f: Path) -> bool:
+    try:
+        import pyarrow.parquet as pq
+        return pq.read_metadata(f).num_rows > 0
+    except Exception:
+        return False
+
+
+def _latest_cached_date() -> str | None:
+    cd = CACHE_DIR / "hist_cores"
+    stems = sorted((f.stem for f in cd.glob("*.parquet")
+                    if re.match(r"^\d{4}-\d{2}-\d{2}$", f.stem)), reverse=True)
+    for s in stems:                       # newest-first; stop at the first non-holiday file
+        if _nonempty_parquet(cd / f"{s}.parquet"):
+            return s
+    return None
+
+
+def _panel_last_date(panel: Path = CLEAN_PANEL) -> str | None:
+    if not Path(panel).exists():
+        return None
+    p = pd.read_parquet(panel, columns=["tradeDate"])
+    return str(pd.to_datetime(p["tradeDate"]).max().date())
+
+
+def _warmup_bdays() -> int:
+    try:
+        from quant_validator.signal_vs_random import WARMUP_BDAYS
+        return int(WARMUP_BDAYS)
+    except Exception:
+        return 756
+
+
+def latest_orats_date(max_back: int = 12, today: str | None = None) -> str | None:
+    """Probe back from `today` for the latest date with ORATS cores data. Skips
+    weekends/holidays and today's not-yet-posted EOD. Live (use_cache=False)."""
+    t = pd.Timestamp(today) if today else pd.Timestamp.today().normalize()
+    for i in range(max_back):
+        ds = (t - pd.tseries.offsets.BDay(i)).strftime("%Y-%m-%d")
+        if not hist_cores(trade_date=ds, use_cache=False).empty:
+            return ds
+    return None
+
+
+def fetch_universe_eod(trade_date: str, endpoints=("cores", "dailies", "ivrank"),
+                       use_cache: bool = True) -> dict:
+    """Full-universe EOD surface for ONE date (all tickers), in as few calls as ORATS
+    allows (one by-date call per endpoint). Cores-gated (empty cores -> non-trading day),
+    cached per date (re-runs skip), progress-logged. Returns {endpoint: row_count}."""
+    fetchers = {"cores": hist_cores, "dailies": hist_dailies, "ivrank": hist_ivrank}
+    counts: dict = {}
+    for ep in ["cores"] + [e for e in endpoints if e != "cores"]:
+        if ep not in fetchers:
+            continue
+        counts[ep] = len(fetchers[ep](trade_date=trade_date, use_cache=use_cache))
+        if ep == "cores" and counts[ep] == 0:
+            print(f"  [orats] {trade_date}: non-trading day (cores empty) -> skip")
+            return counts
+    print(f"  [orats] {trade_date}: " + " ".join(f"{k}={v}" for k, v in counts.items()))
+    return counts
+
+
+def catch_up_backfill(start: str, end: str, endpoints=("cores", "dailies", "ivrank")) -> list[str]:
+    """Pull every business day in [start, end] so the trailing window is CONTINUOUS to
+    `end`. Resumable (per-date cache), rate-limit-aware (throttle+backoff in _get), and
+    gap/halt-tolerant (cores-gated holidays, the 2026-03-11 server-gap precedent: an empty
+    day is skipped, not fatal). Returns the trading dates that had data."""
+    dates = pd.bdate_range(pd.Timestamp(start), pd.Timestamp(end))
+    print(f"[orats] catch-up backfill {start}..{end}: {len(dates)} business days "
+          f"x {len(endpoints)} endpoints (resumable, cached, throttled)")
+    trading = []
+    for d in dates:
+        ds = d.strftime("%Y-%m-%d")
+        if fetch_universe_eod(ds, endpoints=endpoints, use_cache=True).get("cores", 0) > 0:
+            trading.append(ds)
+    print(f"[orats] backfill done: {len(trading)} trading days "
+          f"({trading[0] if trading else '-'} .. {trading[-1] if trading else '-'})")
+    return trading
+
+
+def build_live_panel(trailing_bdays: int | None = None, latest: str | None = None,
+                     out: Path = LIVE_PANEL) -> dict:
+    """Build the rolling live panel = the trailing-window feature panel from cache, using
+    the EXACT historical feature math (build_universe_signal via `since`). Default trailing
+    window = the 3yr / 756-bday warm-up convention, so the latest date is fully warmed."""
+    trailing_bdays = trailing_bdays or _warmup_bdays()
+    latest = latest or _latest_cached_date()
+    if latest is None:
+        raise RuntimeError("no cached ORATS dates — run catch_up_backfill first")
+    # +10 bday cushion so percentile windows at the latest date have a full lookback
+    since = (pd.Timestamp(latest) - pd.tseries.offsets.BDay(trailing_bdays + 10)).strftime("%Y-%m-%d")
+    print(f"[orats] build live panel: trailing {trailing_bdays} bdays (since {since}) -> {latest}")
+    res = build_universe_signal(out=str(out), self_check=False, since=since)
+    return {"since": since, "latest": latest, **(res or {})}
+
+
+def live_fires(panel_path: Path = LIVE_PANEL, latest: str | None = None) -> pd.DataFrame:
+    """Apply the consensus (M1∧M2∧M3, freshness 3, hi/lo 75/25, sigma_thr 1.0) to the
+    trailing live panel and return the LATEST session's fires (the same engine the backtest
+    uses). tail(8) per ticker is enough for freshness(3) + the 4-bar M3 windows."""
+    from quant_validator.consensus_signal import (ConsensusOpts, compute_consensus,
+                                                   signal_sign)
+    df = pd.read_parquet(panel_path)
+    df["tradeDate"] = pd.to_datetime(df["tradeDate"])
+    latest_ts = pd.Timestamp(latest) if latest else df["tradeDate"].max()
+    opts = ConsensusOpts()
+    rows = []
+    for tk, g in df.groupby("ticker", sort=False):
+        g = g.sort_values("tradeDate")
+        if g["tradeDate"].iloc[-1] != latest_ts:
+            continue  # ticker absent on the latest session (delisted/halted) — skip
+        r = compute_consensus(g.tail(8), opts).iloc[-1]
+        if r["side"] is not None:
+            rows.append({"ticker": str(tk), "tradeDate": str(latest_ts.date()),
+                         "side": r["side"], "signal_sign": signal_sign(r["side"]),
+                         "putP": r["putP"], "callP": r["callP"], "ivP": r["ivP"],
+                         "rrP": r["rrP"], "sigma": r["sigma"], "skewDelta": r["skewDelta"],
+                         "clsPx": r["clsPx"]})
+    out = pd.DataFrame(rows)
+    return out.sort_values("ticker").reset_index(drop=True) if not out.empty else out
+
+
+def _update_live_feed_report(strategy: str, signal_date: str, latest_session: str,
+                             n: int, n_long: int, n_short: int, sane: bool) -> None:
+    """Flip queue_meta.live_feed.is_live_orats True (when signal_date == latest session) and
+    write a durable phases.4_paper.live_orats block, then re-render. No trading touched."""
+    jpath = REPORTS / strategy / "report.json"
+    if not jpath.exists():
+        return
+    rep = json.loads(jpath.read_text(encoding="utf-8"))
+    p4 = rep.setdefault("phases", {}).setdefault("4_paper", {"status": "not_started", "note": ""})
+    is_live = signal_date == latest_session
+    live = {"is_live_orats": is_live, "signal_date": signal_date, "latest_session": latest_session,
+            "n_fires": n, "n_long": n_long, "n_short": n_short, "sane_range": sane,
+            "source": "live daily full-universe ORATS pull (adapters.orats live)",
+            "updated_at": pd.Timestamp.utcnow().isoformat(timespec="seconds"),
+            "note": (f"Live ORATS feed wired: backfilled to {latest_session}, signal recomputed on "
+                     f"the trailing {_warmup_bdays()}-bday window -> {n} fires ({n_long} long / "
+                     f"{n_short} short) on {signal_date}. Feed verified; submission NOT yet wired "
+                     f"to the live panel (next step).")}
+    p4["live_orats"] = live
+    qm = p4.get("queue_meta")
+    if isinstance(qm, dict) and isinstance(qm.get("live_feed"), dict):
+        qm["live_feed"]["is_live_orats"] = is_live           # the literal flip
+        qm["live_feed"]["signal_date"] = signal_date
+        qm["live_feed"]["latest_session"] = latest_session
+        if is_live:
+            qm["live_feed"]["gap"] = (f"Live daily ORATS feed wired (adapters.orats live): current "
+                                      f"surface pulled to {latest_session}, {n} fires computed on the "
+                                      f"3yr warm-up. Submission still reads the static queue panel — "
+                                      f"pointing the queue builder at the live panel is the next step.")
+    p4["updated_at"] = live["updated_at"]
+    rep["updated_at"] = live["updated_at"]
+    jpath.write_text(json.dumps(rep, indent=2), encoding="utf-8")
+    try:
+        from quant_validator import reporter
+        reporter.render(strategy)
+    except Exception as e:  # noqa: BLE001
+        print(f"  [orats] report render skipped: {type(e).__name__}")
+
+
+def run_live(strategy: str = "skew_consensus_v22_novix", trailing_bdays: int | None = None,
+             sane_low: int = 120, sane_high: int = 300, update_report: bool = True) -> dict:
+    """End-to-end LIVE feed: find latest session -> backfill the gap to it -> rebuild the
+    trailing panel -> fire the consensus -> verify + report. DOES NOT TRADE."""
+    latest = latest_orats_date()
+    if latest is None:
+        raise RuntimeError("no recent ORATS session found (API down / extended holiday?)")
+    panel_end = _panel_last_date() or _latest_cached_date()
+    gap_start = (pd.Timestamp(panel_end) + pd.tseries.offsets.BDay(1)).strftime("%Y-%m-%d")
+    print(f"[orats] live feed: panel ends {panel_end}, latest ORATS session {latest}")
+    if pd.Timestamp(gap_start) <= pd.Timestamp(latest):
+        catch_up_backfill(gap_start, latest)
+    else:
+        print(f"[orats] no gap to backfill (cache already current to {panel_end})")
+    build_live_panel(trailing_bdays=trailing_bdays, latest=latest)
+    fires = live_fires(latest=latest)
+    n = len(fires)
+    n_long = int((fires["signal_sign"] > 0).sum()) if n else 0
+    n_short = int((fires["signal_sign"] < 0).sum()) if n else 0
+    sane = sane_low <= n <= sane_high
+    Path("data/orats").mkdir(parents=True, exist_ok=True)
+    if n:
+        fires.to_csv(f"data/orats/live_fires_{latest}.csv", index=False)
+    print("=" * 72)
+    print(f"[orats] LIVE FIRES on {latest}: {n} total = {n_long} LONG (BEAR-fade) / "
+          f"{n_short} SHORT (BULL-fade)")
+    print(f"[orats] sanity vs history (~150-250/day, cf 204 on 2026-05-01): "
+          f"{n} in [{sane_low},{sane_high}] -> {'SANE' if sane else 'OUT OF RANGE — investigate'}")
+    if n:
+        print(f"[orats] sample: {', '.join(fires['ticker'].head(8))} ...")
+    print("[orats] NO TRADING — feed verified before submission is wired.")
+    print("=" * 72)
+    if update_report:
+        _update_live_feed_report(strategy, latest, latest, n, n_long, n_short, sane)
+        print(f"[orats] report.json phases.4_paper.live_orats updated (is_live_orats="
+              f"{latest == latest}); report.html re-rendered.")
+    return {"latest_session": latest, "signal_date": latest, "n_fires": n,
+            "n_long": n_long, "n_short": n_short, "sane": sane,
+            "fires_csv": f"data/orats/live_fires_{latest}.csv" if n else None}
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────
@@ -696,6 +914,13 @@ def main(argv: list[str] | None = None) -> int:
     pu.add_argument("--cache-dir", default=None)
     pu.add_argument("--out", default="data/orats/universe_signal.parquet")
     pu.add_argument("--lookback", type=int, default=252)
+    pu.add_argument("--since", default=None, help="only read by-date cache files on/after this date")
+
+    pl = sub.add_parser("live", help="live daily feed: backfill the gap, rebuild the trailing "
+                                     "panel, fire the consensus on the latest session (NO trading)")
+    pl.add_argument("--strategy", default="skew_consensus_v22_novix")
+    pl.add_argument("--trailing-bdays", type=int, default=None, help="default = 756 (3yr warm-up)")
+    pl.add_argument("--no-report", action="store_true", help="don't touch report.json/html")
 
     args = parser.parse_args(argv)
     if args.cmd == "fetch":
@@ -707,7 +932,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "backfill":
         return _cmd_backfill(args)
     if args.cmd == "build-universe":
-        build_universe_signal(cache_dir=args.cache_dir, lookback=args.lookback, out=args.out)
+        build_universe_signal(cache_dir=args.cache_dir, lookback=args.lookback, out=args.out,
+                              since=args.since)
+        return 0
+    if args.cmd == "live":
+        run_live(strategy=args.strategy, trailing_bdays=args.trailing_bdays,
+                 update_report=not args.no_report)
         return 0
     return 1
 

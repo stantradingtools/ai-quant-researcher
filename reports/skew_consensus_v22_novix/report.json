@@ -3,7 +3,7 @@
   "version": 3,
   "run_mode": "A",
   "status": "validated + sized",
-  "updated_at": "2026-05-25T15:07:14+00:00",
+  "updated_at": "2026-05-25T15:47:31+00:00",
   "git_commit": "7533d7e",
   "stages": {
     "1_hypothesis": {
@@ -774,7 +774,7 @@
   "phases": {
     "4_paper": {
       "status": "deployed",
-      "updated_at": "2026-05-25T15:07:14+00:00",
+      "updated_at": "2026-05-25T15:47:31+00:00",
       "note": "Alpaca PAPER (alpaca_paper, tif=OPG): 3 targets, 3 accepted, 0/1 short fires skipped non-shortable; equity $1000000.0; shortability coverage 53.3% (14/30 short names non-shortable); ~21-bday scheduled exits; no-flip-without-close. OOS vs sized backtest: warming up (0 sessions). Phase-5 live = same path, paper=False + live keys.",
       "next_open_queue": [
         {
@@ -3339,8 +3339,10 @@
         "reconciled_open_orders": [],
         "live_feed": {
           "source": "STATIC panel data/av/signal_panel_clean.parquet (last date 2026-05-01)",
-          "is_live_orats": false,
-          "gap": "No daily ORATS refresh is wired: the 'latest signal date' is the static panel's last date, not today's surface. Genuine next-day trading needs a live daily ORATS pull (adapters.orats) feeding this loop \u2014 that feed is the next gap."
+          "is_live_orats": true,
+          "gap": "Live daily ORATS feed wired (adapters.orats live): current surface pulled to 2026-05-22, 215 fires computed on the 3yr warm-up. Submission still reads the static queue panel \u2014 pointing the queue builder at the live panel is the next step.",
+          "signal_date": "2026-05-22",
+          "latest_session": "2026-05-22"
         },
         "submitted": false,
         "mode": "dry_run"
@@ -3357,6 +3359,18 @@
         "dd_resume_pct": 7.000000000000001,
         "dd_hard_pct": 25.0,
         "note": "rolling peak-to-current drawdown from account equity"
+      },
+      "live_orats": {
+        "is_live_orats": true,
+        "signal_date": "2026-05-22",
+        "latest_session": "2026-05-22",
+        "n_fires": 215,
+        "n_long": 110,
+        "n_short": 105,
+        "sane_range": true,
+        "source": "live daily full-universe ORATS pull (adapters.orats live)",
+        "updated_at": "2026-05-25T15:47:31+00:00",
+        "note": "Live ORATS feed wired: backfilled to 2026-05-22, signal recomputed on the trailing 756-bday window -> 215 fires (110 long / 105 short) on 2026-05-22. Feed verified; submission NOT yet wired to the live panel (next step)."
       }
     },
     "5_live": {

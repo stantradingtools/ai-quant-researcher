@@ -205,6 +205,23 @@ def _verdict_table(v: dict) -> str:
     return f"<table>{head}<tbody>{rows}</tbody></table>"
 
 
+def _live_orats_block(p4: dict) -> str:
+    """Phase-4 live ORATS feed status: today's fire count + L/S split + signal date."""
+    lo = p4.get("live_orats")
+    if not lo:
+        return ""
+    live = bool(lo.get("is_live_orats"))
+    fg, bg, bd = (("#0a7a3c", "#e7f4ec", "#bfe3cd") if live else ("#b85c00", "#fbf0e1", "#f0d8b6"))
+    chip = _chip("deployed" if live else "pending")
+    sane = "count in range" if lo.get("sane_range") else "count OUT OF RANGE"
+    return (f'<p class="note" style="margin-top:14px;background:{bg};border:1px solid {bd};'
+            f'border-radius:6px;padding:8px 10px;color:{fg}"><b>Live ORATS feed</b> {chip} &middot; '
+            f"today's fires: <b>{_esc(lo.get('n_fires'))}</b> "
+            f"({_esc(lo.get('n_long'))} long / {_esc(lo.get('n_short'))} short) as of "
+            f"<b>{_esc(lo.get('signal_date'))}</b> (latest session {_esc(lo.get('latest_session'))}) "
+            f"&middot; {sane}. {_esc(lo.get('note',''))}</p>")
+
+
 def _owned_block(p4: dict) -> str:
     """Phase-4 kill-switch state + owned-positions table (ledger-tracked, scheduled exits)."""
     ks = p4.get("kill_switch")
@@ -270,9 +287,16 @@ def _queue_block(p4: dict) -> str:
     if skipped:
         items = "; ".join(f'{_esc(s.get("symbol"))} ({_esc(s.get("reason"))})' for s in skipped)
         skip_html = f'<p class="cap"><b>Non-shortable, skipped ({len(skipped)}):</b> {items}</p>'
-    gap = (m.get("live_feed") or {}).get("gap", "")
-    gap_html = (f'<p class="note" style="background:#fbf0e1;border:1px solid #f0d8b6;border-radius:6px;'
-                f'padding:8px 10px;color:#b85c00"><b>Live-feed gap:</b> {_esc(gap)}</p>' if gap else "")
+    lf = m.get("live_feed") or {}
+    gap = lf.get("gap", "")
+    if not gap:
+        gap_html = ""
+    elif lf.get("is_live_orats"):
+        gap_html = (f'<p class="note" style="background:#e7f4ec;border:1px solid #bfe3cd;border-radius:6px;'
+                    f'padding:8px 10px;color:#0a7a3c"><b>Live ORATS feed:</b> {_esc(gap)}</p>')
+    else:
+        gap_html = (f'<p class="note" style="background:#fbf0e1;border:1px solid #f0d8b6;border-radius:6px;'
+                    f'padding:8px 10px;color:#b85c00"><b>Live-feed gap:</b> {_esc(gap)}</p>')
     return hdr + stats + table + skip_html + gap_html
 
 
@@ -328,6 +352,7 @@ def render_html(rep: dict) -> str:
         ph_inner += (f'<p class="note">{_esc(label)} {_chip(pl.get("status","not_started"))} '
                      f'{_esc(pl.get("note",""))}</p>')
         if k == "4_paper":
+            ph_inner += _live_orats_block(pl)
             ph_inner += _owned_block(pl)
             ph_inner += _queue_block(pl)
     ph_status = ph.get("4_paper", {}).get("status", "not_started")
