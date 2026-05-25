@@ -3,7 +3,7 @@
   "version": 2,
   "run_mode": "A",
   "status": "validated + sized",
-  "updated_at": "2026-05-25T11:48:17+00:00",
+  "updated_at": "2026-05-25T12:48:48+00:00",
   "git_commit": "8298d99",
   "stages": {
     "1_hypothesis": {
@@ -525,8 +525,9 @@
   },
   "phases": {
     "4_paper": {
-      "status": "not_started",
-      "note": "(promote via deploy when ready)"
+      "status": "deployed",
+      "updated_at": "2026-05-25T12:48:48+00:00",
+      "note": "Alpaca PAPER (alpaca_paper, tif=OPG): 3 targets, 3 accepted, 0/1 short fires skipped non-shortable; equity $1000000.0; shortability coverage 53.3% (14/30 short names non-shortable); ~21-bday scheduled exits; no-flip-without-close. OOS vs sized backtest: warming up (0 sessions). Phase-5 live = same path, paper=False + live keys."
     },
     "5_live": {
       "status": "not_started",

@@ -39,6 +39,7 @@ data/cache/
 # figures/*.png
 
 # Stan fork additions
+reports/*/paper_state.json
 theses/
 stan_fork_overlay_*.zip
 _tmp_overlay/
