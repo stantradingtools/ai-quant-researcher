@@ -372,6 +372,179 @@ def _write_paper_phase(strategy: str, state: dict) -> None:
     reporter.render(strategy)
 
 
+# ── next-open trade queue (the REAL sized book for the next session) ──────
+#
+# SIGNAL SOURCE (the live-feed gap, surfaced honestly): the book is computed off the
+# LATEST date in the STATIC clean ORATS panel (data/av/signal_panel_clean.parquet), NOT
+# a live daily ORATS pull. Genuine next-day trading needs a daily ORATS refresh; until
+# that feed is wired the "latest signal date" is the panel's last date — reported as a gap.
+
+SIZING_LAM, SIZING_RHO = 0.25, 0.30                       # Stage-2 fractional Kelly + const-corr rho
+SIZING_MAXW, SIZING_GROSS, SIZING_NET = 0.05, 1.0, 0.50   # Risk-Agent caps
+DEPLOY_MULT = 0.5                                         # Risk Agent: deploy at 0.5x approved size
+FALLBACK_EQUITY = 1_000_000.0
+CLEAN_PANEL = pathlib.Path("data/av/signal_panel_clean.parquet")
+
+
+def _latest_signal_book(panel_path: pathlib.Path = CLEAN_PANEL):
+    """LATEST tradeable signal date + its fires. NO forward-return requirement — a live
+    entry doesn't need the (future) outcome, only that the signal fired and the name is
+    tradeable. Returns (signal_ts, frame[symbol, side, signal_sign, raw_close])."""
+    from .consensus_signal import signal_sign
+    from .signal_vs_random import clean_run_columns
+    p = pd.read_parquet(panel_path, columns=clean_run_columns())
+    elig = p["side"].notna() & p["av_matched"].astype(bool) & (p["raw_close"] >= 1.0)
+    f = p[elig]
+    last = f["tradeDate"].max()
+    b = f[f["tradeDate"] == last].copy()
+    b["signal_sign"] = b["side"].astype(str).map(signal_sign).astype(float)
+    b = b.rename(columns={"ticker": "symbol"})[["symbol", "side", "signal_sign", "raw_close"]]
+    return last, b.reset_index(drop=True)
+
+
+def _size_book(book: pd.DataFrame, panel_path: pathlib.Path = CLEAN_PANEL):
+    """Size ONE date's book with the Stage-2 engine (lambda=0.25, const-corr rho, caps).
+    mu + per-name sigma come from the fwd-complete HISTORY (this book has no outcome yet)."""
+    import numpy as np
+
+    from .sizing import (apply_caps, build_position_panel, kelly_fracs, per_name_sigma)
+    hist = build_position_panel(panel_path)               # fwd-complete -> mu + sigma inputs
+    mu = float(hist["net_return"].mean())
+    sig_map, pooled = per_name_sigma(hist)
+    sym = book["symbol"].to_numpy()
+    sgn = book["signal_sign"].to_numpy(float)
+    sigma = np.array([sig_map.get(str(s), pooled) for s in sym], dtype=float)
+    f = apply_caps(kelly_fracs(sigma, mu, SIZING_RHO, SIZING_LAM), sgn,
+                   max_w=SIZING_MAXW, gross_cap=SIZING_GROSS, net_cap=SIZING_NET)
+    out = book.copy()
+    out["kelly_weight"] = f                               # fraction of NAV (gross<=1), pre-deploy-mult
+    return out, mu, pooled
+
+
+def _existing_open_symbols(fs: AlpacaFillSource) -> tuple[set, list]:
+    """Symbols already represented on the venue (open order OR live position) — so the
+    queue does NOT double-submit them (e.g. the 3 open demo orders)."""
+    syms, open_orders = set(), []
+    try:
+        from alpaca.trading.enums import QueryOrderStatus
+        from alpaca.trading.requests import GetOrdersRequest
+        for o in fs.client.get_orders(filter=GetOrdersRequest(status=QueryOrderStatus.OPEN)):
+            syms.add(str(o.symbol))
+            open_orders.append({"symbol": str(o.symbol), "side": str(o.side).split(".")[-1].lower(),
+                                "qty": float(o.qty or 0), "status": str(o.status).split(".")[-1].lower()})
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        for p in fs.client.get_all_positions():
+            syms.add(str(p.symbol))
+    except Exception:  # noqa: BLE001
+        pass
+    return syms, open_orders
+
+
+def build_next_open_queue(strategy: str = "skew_consensus_v22_novix",
+                          fills_mode: str = "alpaca_paper", deploy_mult: float = DEPLOY_MULT,
+                          gate_shorts: bool = True, panel_path: pathlib.Path = CLEAN_PANEL) -> dict:
+    """DRY-RUN build of the real next-session book: latest ORATS signal date -> fires ->
+    Stage-2 sizing -> shortability gate (short side) -> reconcile vs open venue orders ->
+    queue. Submits NOTHING (the point is to VIEW the book; demo orders aren't re-fired)."""
+    last, book = _latest_signal_book(panel_path)
+    book, mu, pooled = _size_book(book, panel_path)
+    signal_date, next_session = str(last.date()), str((last + pd.offsets.BDay(1)).date())
+
+    fs = (make_fill_source(fills_mode, tif="OPG") if fills_mode != "modeled"
+          else make_fill_source(fills_mode))
+    equity, existing, open_orders, recon = FALLBACK_EQUITY, set(), [], {"source": "modeled"}
+    if isinstance(fs, AlpacaFillSource):
+        recon = fs.reconcile({})
+        equity = float(recon.get("equity") or FALLBACK_EQUITY)
+        existing, open_orders = _existing_open_symbols(fs)
+    deployable = deploy_mult * equity
+
+    book = book.sort_values("kelly_weight", ascending=False)
+    queue, skipped, gated = [], [], 0
+    for r in book.itertuples():
+        sym, sign, px = str(r.symbol), int(r.signal_sign), float(r.raw_close)
+        w = float(r.kelly_weight) * deploy_mult           # deployed fraction of NAV
+        notional = round(w * equity, 2)
+        direction = "BULL" if sign < 0 else "BEAR"
+        order_side = "sell" if sign < 0 else "buy"
+        if sign < 0 and gate_shorts and isinstance(fs, AlpacaFillSource):  # short side only
+            gated += 1
+            ok, why = fs._shortable(sym)
+            if not ok:
+                skipped.append({"symbol": sym, "reason": why,
+                                "weight": round(w, 5), "notional": notional})
+                continue
+        qty = max(1, int(notional / px)) if px > 0 else 0
+        queue.append({"symbol": sym, "direction": direction, "side": order_side,
+                      "qty": qty, "notional": notional, "weight": round(w, 5),
+                      "type": "market", "tif": "OPG",
+                      "status": "already_open" if sym in existing else "queued",
+                      "expected_fill_session": next_session})
+
+    n_long = sum(1 for q in queue if q["side"] == "buy")
+    n_short = sum(1 for q in queue if q["side"] == "sell")
+    meta = {
+        "signal_date": signal_date, "next_session": next_session,
+        "equity": equity, "deploy_mult": deploy_mult, "lambda": SIZING_LAM, "rho": SIZING_RHO,
+        "n_fires": int(len(book)), "n_queued": len(queue), "n_long": n_long, "n_short": n_short,
+        "n_skipped_non_shortable": len(skipped), "n_shorts_gated": gated,
+        "gross_weight": round(sum(q["weight"] for q in queue), 4),
+        "net_weight": round(sum(q["weight"] * (1 if q["side"] == "buy" else -1) for q in queue), 4),
+        "mu_per_trade_bps": round(mu * 1e4, 1),
+        "reconciled_open_orders": open_orders,
+        "live_feed": {
+            "source": f"STATIC panel {panel_path.as_posix()} (last date {signal_date})",
+            "is_live_orats": False,
+            "gap": ("No daily ORATS refresh is wired: the 'latest signal date' is the static "
+                    "panel's last date, not today's surface. Genuine next-day trading needs a live "
+                    "daily ORATS pull (adapters.orats) feeding this loop — that feed is the next gap."),
+        },
+        "submitted": False, "mode": "dry_run",
+    }
+    return {"queue_meta": meta, "next_open_queue": queue, "shortability_skipped": skipped,
+            "fills_mode": fills_mode, "updated_at": _now()}
+
+
+def _write_next_open_queue(strategy: str, qstate: dict) -> None:
+    """Persist the queue: full CSV/JSON + report.json phases.4_paper slice, then re-render."""
+    from . import reporter
+    out = REPORTS / strategy
+    out.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(qstate["next_open_queue"]).to_csv(out / "next_open_queue.csv", index=False)
+    (out / "next_open_queue.json").write_text(json.dumps(qstate, indent=2), encoding="utf-8")
+    jpath = out / "report.json"
+    if not jpath.exists():
+        return
+    rep = json.loads(jpath.read_text(encoding="utf-8"))
+    p4 = rep.setdefault("phases", {}).setdefault("4_paper", {"status": "not_started", "note": ""})
+    p4["next_open_queue"] = qstate["next_open_queue"]
+    p4["shortability_skipped"] = qstate["shortability_skipped"]
+    p4["queue_meta"] = qstate["queue_meta"]
+    p4["updated_at"] = qstate["updated_at"]
+    rep["updated_at"] = qstate["updated_at"]
+    jpath.write_text(json.dumps(rep, indent=2), encoding="utf-8")
+    reporter.render(strategy)
+
+
+def run_queue(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "alpaca_paper",
+              deploy_mult: float = DEPLOY_MULT, gate_shorts: bool = True) -> dict:
+    q = build_next_open_queue(strategy, fills_mode, deploy_mult, gate_shorts)
+    _write_next_open_queue(strategy, q)
+    m = q["queue_meta"]
+    recon = ", ".join(o["symbol"] for o in m["reconciled_open_orders"]) or "none"
+    print(f"[queue] {strategy}: signal {m['signal_date']} -> fills {m['next_session']} | "
+          f"{m['n_queued']} queued ({m['n_long']}L/{m['n_short']}S), "
+          f"{m['n_skipped_non_shortable']}/{m['n_shorts_gated']} shorts non-shortable | "
+          f"gross {m['gross_weight']} net {m['net_weight']} | equity ${m['equity']:,.0f} deploy {deploy_mult}x")
+    print(f"[queue] reconciled vs {len(m['reconciled_open_orders'])} open venue order(s) [{recon}]; "
+          f"DRY-RUN (nothing submitted)")
+    print(f"[queue] LIVE-FEED GAP: {m['live_feed']['gap']}")
+    print(f"[queue] wrote reports/{strategy}/next_open_queue.csv + report.json phases.4_paper + report.html")
+    return q
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="quant_validator.fills")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -382,10 +555,20 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--limit", type=int, default=5)
     pr.add_argument("--sample", type=int, default=50, help="# short symbols to gate for the coverage stat")
     pr.add_argument("--tif", default="OPG", choices=["OPG", "DAY"])
+    pq = sub.add_parser("queue", help="build + view the REAL next-open trade queue (dry-run)")
+    pq.add_argument("--strategy", default="skew_consensus_v22_novix")
+    pq.add_argument("--fills", default="alpaca_paper", choices=["modeled", "alpaca_paper", "alpaca_live"])
+    pq.add_argument("--deploy-mult", type=float, default=DEPLOY_MULT)
+    pq.add_argument("--no-gate", action="store_true",
+                    help="skip the live shortability gate (faster, but the short book is unverified)")
     args = ap.parse_args(argv)
     if args.cmd == "run":
         run(strategy=args.strategy, fills_mode=args.fills, submit=args.submit,
             limit=args.limit, sample=args.sample, tif=args.tif)
+        return 0
+    if args.cmd == "queue":
+        run_queue(strategy=args.strategy, fills_mode=args.fills,
+                  deploy_mult=args.deploy_mult, gate_shorts=not args.no_gate)
         return 0
     return 1
 

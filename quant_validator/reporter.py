@@ -29,6 +29,7 @@ REPORTS = Path("reports")
 _CHIP = {"done": ("done", "ok"), "pass": ("pass", "ok"), "deployed": ("deployed", "blue"),
          "running": ("running", "amber"), "pending": ("pending", "amber"),
          "flagged": ("flagged", "amber"), "paused": ("paused", "amber"),
+         "queued": ("queued", "amber"), "already_open": ("open", "blue"),
          "fail": ("fail", "red"), "not_started": ("not started", "gray")}
 
 _CSS = """
@@ -203,6 +204,45 @@ def _verdict_table(v: dict) -> str:
     return f"<table>{head}<tbody>{rows}</tbody></table>"
 
 
+def _queue_block(p4: dict) -> str:
+    """Phase-4 'Next-open trade queue' — one row per order, sized + shortability-gated."""
+    q = p4.get("next_open_queue")
+    if not q:
+        return ""
+    m = p4.get("queue_meta", {})
+    skipped = p4.get("shortability_skipped", []) or []
+    eq = m.get("equity")
+    eq_txt = f"${eq:,.0f}" if isinstance(eq, (int, float)) else _esc(eq)
+    hdr = (f'<p class="note" style="margin-top:14px"><b>Next-open trade queue</b> — queue as of '
+           f'<b>{_esc(m.get("signal_date"))}</b>, fills at <b>{_esc(m.get("next_session"))}</b> '
+           f'(market-on-open / OPG). Stage-2 fractional Kelly &lambda;={_esc(m.get("lambda"))}, '
+           f'deploy {_esc(m.get("deploy_mult"))}&times; on {eq_txt}.</p>')
+    stats = (f'<p class="cap">{len(q)} orders &middot; {m.get("n_long","?")} long / '
+             f'{m.get("n_short","?")} short &middot; gross {m.get("gross_weight","?")} / '
+             f'net {m.get("net_weight","?")} &middot; {len(skipped)} non-shortable skipped '
+             f'&middot; reconciled vs {len(m.get("reconciled_open_orders", []))} open demo order(s) '
+             f'&middot; <b>DRY-RUN</b> (no new orders submitted).</p>')
+    head = ("<thead><tr><th>symbol</th><th>dir</th><th>side</th><th>qty</th><th>notional</th>"
+            "<th>weight</th><th>type</th><th>tif</th><th>status</th></tr></thead>")
+    rows = ""
+    for o in q:
+        sidecls = "neg" if o.get("side") == "sell" else "pos"
+        rows += (f'<tr><td>{_esc(o.get("symbol"))}</td><td>{_esc(o.get("direction"))}</td>'
+                 f'<td class="{sidecls}">{_esc(o.get("side"))}</td><td>{_esc(o.get("qty"))}</td>'
+                 f'<td>${o.get("notional",0):,.0f}</td><td>{o.get("weight",0)*100:.2f}%</td>'
+                 f'<td>{_esc(o.get("type"))}</td><td>{_esc(o.get("tif"))}</td>'
+                 f'<td>{_chip(o.get("status","queued"))}</td></tr>')
+    table = f"<table>{head}<tbody>{rows}</tbody></table>"
+    skip_html = ""
+    if skipped:
+        items = "; ".join(f'{_esc(s.get("symbol"))} ({_esc(s.get("reason"))})' for s in skipped)
+        skip_html = f'<p class="cap"><b>Non-shortable, skipped ({len(skipped)}):</b> {items}</p>'
+    gap = (m.get("live_feed") or {}).get("gap", "")
+    gap_html = (f'<p class="note" style="background:#fbf0e1;border:1px solid #f0d8b6;border-radius:6px;'
+                f'padding:8px 10px;color:#b85c00"><b>Live-feed gap:</b> {_esc(gap)}</p>' if gap else "")
+    return hdr + stats + table + skip_html + gap_html
+
+
 def render_html(rep: dict) -> str:
     s = rep.get("stages", {})
 
@@ -254,7 +294,10 @@ def render_html(rep: dict) -> str:
         pl = ph.get(k, {"status": "not_started"})
         ph_inner += (f'<p class="note">{_esc(label)} {_chip(pl.get("status","not_started"))} '
                      f'{_esc(pl.get("note",""))}</p>')
-    secs.append(_section("Phases", "not_started", "", ph_inner))
+        if k == "4_paper":
+            ph_inner += _queue_block(pl)
+    ph_status = ph.get("4_paper", {}).get("status", "not_started")
+    secs.append(_section("Phases", ph_status, ph.get("4_paper", {}).get("updated_at", ""), ph_inner))
 
     hdr = (
         f'<header class="band"><h1>{_esc(rep.get("strategy"))} {_chip(_overall_chip(rep))}</h1>'
