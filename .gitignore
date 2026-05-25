@@ -40,6 +40,7 @@ data/cache/
 
 # Stan fork additions
 reports/*/paper_state.json
+reports/*/paper_ledger.json
 theses/
 stan_fork_overlay_*.zip
 _tmp_overlay/

@@ -30,6 +30,7 @@ _CHIP = {"done": ("done", "ok"), "pass": ("pass", "ok"), "deployed": ("deployed"
          "running": ("running", "amber"), "pending": ("pending", "amber"),
          "flagged": ("flagged", "amber"), "paused": ("paused", "amber"),
          "queued": ("queued", "amber"), "already_open": ("open", "blue"),
+         "open": ("held", "ok"), "closed": ("closed", "gray"),
          "fail": ("fail", "red"), "not_started": ("not started", "gray")}
 
 _CSS = """
@@ -204,6 +205,38 @@ def _verdict_table(v: dict) -> str:
     return f"<table>{head}<tbody>{rows}</tbody></table>"
 
 
+def _owned_block(p4: dict) -> str:
+    """Phase-4 kill-switch state + owned-positions table (ledger-tracked, scheduled exits)."""
+    ks = p4.get("kill_switch")
+    owned = p4.get("owned_positions")
+    if not ks and owned is None:
+        return ""
+    out = ""
+    if ks:
+        sim = " (simulated)" if ks.get("simulated") else ""
+        out += (f'<p class="note" style="margin-top:14px"><b>Kill-switch</b> {_chip(ks.get("state","deployed"))}'
+                f' &middot; drawdown {ks.get("drawdown_pct","?")}%{sim} '
+                f'(pause &minus;{ks.get("dd_pause_pct",15):.0f}% / hard-flatten &minus;{ks.get("dd_hard_pct",25):.0f}%) '
+                f'&middot; equity ${ks.get("equity",0):,.0f} / peak ${ks.get("peak_equity",0):,.0f}. '
+                f'Paused &rarr; new entries blocked; hard breach &rarr; owned positions flattened via API.</p>')
+    out += '<p class="note"><b>Owned positions</b> (ledger-tracked, ~21-bday scheduled exits):</p>'
+    if owned:
+        head = ("<thead><tr><th>symbol</th><th>side</th><th>qty</th><th>entry signal</th>"
+                "<th>fill</th><th>days held</th><th>scheduled exit</th><th>status</th></tr></thead>")
+        rows = ""
+        for o in owned:
+            sidecls = "neg" if str(o.get("side", "")).upper() in ("SELL", "BULL") else "pos"
+            rows += (f'<tr><td>{_esc(o.get("symbol"))}</td><td class="{sidecls}">{_esc(o.get("side"))}</td>'
+                     f'<td>{_esc(o.get("qty"))}</td><td>{_esc(o.get("entry_signal_date"))}</td>'
+                     f'<td>{_esc(o.get("entry_fill_date") or "&mdash;")}</td><td>{_esc(o.get("days_held"))}</td>'
+                     f'<td>{_esc(o.get("scheduled_exit_date"))}</td><td>{_chip(o.get("status","open"))}</td></tr>')
+        out += f"<table>{head}<tbody>{rows}</tbody></table>"
+    else:
+        out += ('<p class="cap">None open &mdash; account flat (entries fired then force-exited in the '
+                'controlled proof, or none submitted yet).</p>')
+    return out
+
+
 def _queue_block(p4: dict) -> str:
     """Phase-4 'Next-open trade queue' — one row per order, sized + shortability-gated."""
     q = p4.get("next_open_queue")
@@ -295,6 +328,7 @@ def render_html(rep: dict) -> str:
         ph_inner += (f'<p class="note">{_esc(label)} {_chip(pl.get("status","not_started"))} '
                      f'{_esc(pl.get("note",""))}</p>')
         if k == "4_paper":
+            ph_inner += _owned_block(pl)
             ph_inner += _queue_block(pl)
     ph_status = ph.get("4_paper", {}).get("status", "not_started")
     secs.append(_section("Phases", ph_status, ph.get("4_paper", {}).get("updated_at", ""), ph_inner))

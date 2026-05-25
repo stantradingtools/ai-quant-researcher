@@ -72,6 +72,7 @@ class TargetPosition:
     qty: float | None = None
     ref_price: float | None = None     # for the modeled fill / notional->qty
     entry_date: str | None = None
+    client_order_id: str | None = None  # idempotency key f"{strategy}:{symbol}:{signal_date}"
 
 
 @dataclass
@@ -133,10 +134,56 @@ class AlpacaFillSource(FillSource):
         from alpaca.trading.enums import OrderSide, TimeInForce
         self._OrderSide, self._TIF = OrderSide, TimeInForce
         self.client = TradingClient(ak, sk, paper=paper)
+        self.paper = paper
         self.tif = tif
         self.poll_s, self.poll_n = poll_s, poll_n
+        self.api_log: list[str] = []          # every venue API call (auditable; no key/URL leak)
+
+    def _api(self, desc: str) -> None:
+        self.api_log.append(desc)
+        print(f"   [api{'/paper' if self.paper else '/LIVE'}] {desc}")
+
+    # ── logged read wrappers (every API call goes through one of these) ──
+    def account(self):
+        self._api("get_account")
+        return self.client.get_account()
+
+    def positions(self) -> list:
+        self._api("get_all_positions")
+        return list(self.client.get_all_positions())
+
+    def open_orders(self) -> list:
+        from alpaca.trading.enums import QueryOrderStatus
+        from alpaca.trading.requests import GetOrdersRequest
+        self._api("get_orders(status=OPEN)")
+        return list(self.client.get_orders(filter=GetOrdersRequest(status=QueryOrderStatus.OPEN)))
+
+    def clock(self):
+        self._api("get_clock")
+        return self.client.get_clock()
+
+    def cancel(self, order_id: str) -> bool:
+        self._api(f"cancel_order_by_id {order_id}")
+        try:
+            self.client.cancel_order_by_id(order_id)
+            return True
+        except Exception as e:  # noqa: BLE001
+            self._api(f"cancel FAILED {order_id}: {type(e).__name__}")
+            return False
+
+    def equity_series(self, period: str = "1M", timeframe: str = "1D") -> list[float]:
+        """Account equity series for the drawdown kill-switch (best-effort)."""
+        try:
+            from alpaca.trading.requests import GetPortfolioHistoryRequest
+            self._api(f"get_portfolio_history({period},{timeframe})")
+            ph = self.client.get_portfolio_history(GetPortfolioHistoryRequest(period=period, timeframe=timeframe))
+            return [float(x) for x in (ph.equity or []) if x is not None]
+        except Exception as e:  # noqa: BLE001
+            self._api(f"get_portfolio_history unavailable: {type(e).__name__}")
+            return []
 
     def _shortable(self, symbol: str) -> tuple[bool, str]:
+        self._api(f"get_asset {symbol}")
         try:
             a = self.client.get_asset(symbol)
         except Exception as e:  # noqa: BLE001
@@ -166,11 +213,20 @@ class AlpacaFillSource(FillSource):
             kw["qty"] = t.qty
         else:
             kw["notional"] = t.notional
+        if t.client_order_id:
+            kw["client_order_id"] = t.client_order_id   # idempotency: Alpaca rejects duplicates
+        self._api(f"submit_order {t.symbol} {side.value} qty={t.qty} tif={self.tif} coid={t.client_order_id}")
         try:
             order = self.client.submit_order(MarketOrderRequest(**kw))
-        except Exception as e:  # noqa: BLE001 — reject/halt/BP, surface (no key/URL leak)
+        except Exception as e:  # noqa: BLE001 — reject/halt/BP/duplicate, surface (no key/URL leak)
+            msg = str(e)
+            # duplicate client_order_id => already submitted on a prior run (idempotent no-op)
+            if "client_order_id" in msg.lower() or "already exist" in msg.lower() or "duplicate" in msg.lower():
+                return Fill(t.symbol, str(side.value), 0.0, 0.0, "duplicate",
+                            order_id=t.client_order_id, submitted_at=_now(),
+                            note="idempotent skip: client_order_id already submitted")
             return Fill(t.symbol, str(side.value), 0.0, 0.0, "rejected",
-                        submitted_at=_now(), note=f"{type(e).__name__}: {str(e)[:120]}")
+                        submitted_at=_now(), note=f"{type(e).__name__}: {msg[:120]}")
         oid = str(order.id)
         # Poll for an actual fill (market may be closed -> stays accepted/pending until open).
         st = str(order.status).split(".")[-1].lower()
@@ -191,6 +247,7 @@ class AlpacaFillSource(FillSource):
                     note=f"alpaca status={st} tif={self.tif}")
 
     def close(self, symbol: str, qty: float, open_sign: int) -> Fill:
+        self._api(f"close_position {symbol} (covering {'long' if open_sign > 0 else 'short'})")
         try:
             o = self.client.close_position(symbol)
             return Fill(symbol, "SELL" if open_sign > 0 else "BUY", float(qty), 0.0,
@@ -201,8 +258,8 @@ class AlpacaFillSource(FillSource):
                         note=f"close failed {type(e).__name__}: {str(e)[:100]}")
 
     def reconcile(self, intended: dict[str, float]) -> dict:
-        acct = self.client.get_account()
-        positions = {p.symbol: p for p in self.client.get_all_positions()}
+        acct = self.account()
+        positions = {p.symbol: p for p in self.positions()}
         disc = []
         for sym, want_sign in intended.items():
             p = positions.get(sym)
@@ -385,6 +442,69 @@ DEPLOY_MULT = 0.5                                         # Risk Agent: deploy a
 FALLBACK_EQUITY = 1_000_000.0
 CLEAN_PANEL = pathlib.Path("data/av/signal_panel_clean.parquet")
 
+# Safety guards (all overridable on the CLI):
+MAX_SIGNAL_AGE_BDAYS = 2            # staleness: refuse to fire on a signal older than this (--allow-stale)
+DD_PAUSE, DD_RESUME, DD_HARD = 0.15, 0.07, 0.25   # kill-switch: pause / resume(hysteresis) / hard-flatten
+
+
+# ── persistent paper ledger (source of truth across runs; gitignored) ─────
+# One record per position keyed by the idempotent client_order_id. Survives restarts so
+# re-running queue --submit never double-fires and manage always knows what is OURS.
+
+def _ledger_path(strategy: str) -> pathlib.Path:
+    return REPORTS / strategy / "paper_ledger.json"
+
+
+def _load_ledger(strategy: str) -> dict:
+    p = _ledger_path(strategy)
+    if p.exists():
+        return json.loads(p.read_text(encoding="utf-8"))
+    return {"strategy": strategy, "updated_at": _now(), "peak_equity": None,
+            "kill_switch_state": "deployed", "positions": {}}
+
+
+def _save_ledger(strategy: str, led: dict) -> None:
+    led["updated_at"] = _now()
+    p = _ledger_path(strategy)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(led, indent=2), encoding="utf-8")
+
+
+def _client_order_id(strategy: str, symbol: str, signal_date: str) -> str:
+    """Idempotency key. Alpaca enforces client_order_id uniqueness -> re-runs can't double-submit."""
+    return f"{strategy}:{symbol}:{signal_date}"
+
+
+def _today() -> pd.Timestamp:
+    return pd.Timestamp.today().normalize()
+
+
+def _signal_age_bdays(signal_date: str) -> int:
+    import numpy as np
+    return int(np.busday_count(pd.Timestamp(signal_date).date(), _today().date()))
+
+
+def _scheduled_exit(entry_date: str, hold_bdays: int = HOLD_BDAYS) -> str:
+    return str((pd.Timestamp(entry_date) + pd.offsets.BDay(hold_bdays)).date())
+
+
+def _owned_view(led: dict) -> list[dict]:
+    """Open ledger positions with days-held + scheduled exit (for the report's owned table)."""
+    import numpy as np
+    today = _today().date()
+    out = []
+    for coid, r in led.get("positions", {}).items():
+        if r.get("status") not in ("open", "pending"):
+            continue
+        base = r.get("entry_fill_date") or r.get("entry_signal_date")
+        days = int(np.busday_count(pd.Timestamp(base).date(), today)) if base else None
+        out.append({"symbol": r["symbol"], "side": r["side"], "qty": r["qty"],
+                    "entry_signal_date": r.get("entry_signal_date"),
+                    "entry_fill_date": r.get("entry_fill_date"), "days_held": days,
+                    "scheduled_exit_date": r.get("scheduled_exit_date"),
+                    "status": r.get("status"), "client_order_id": coid})
+    return out
+
 
 def _latest_signal_book(panel_path: pathlib.Path = CLEAN_PANEL):
     """LATEST tradeable signal date + its fires. NO forward-return requirement — a live
@@ -426,16 +546,16 @@ def _existing_open_symbols(fs: AlpacaFillSource) -> tuple[set, list]:
     queue does NOT double-submit them (e.g. the 3 open demo orders)."""
     syms, open_orders = set(), []
     try:
-        from alpaca.trading.enums import QueryOrderStatus
-        from alpaca.trading.requests import GetOrdersRequest
-        for o in fs.client.get_orders(filter=GetOrdersRequest(status=QueryOrderStatus.OPEN)):
+        for o in fs.open_orders():
             syms.add(str(o.symbol))
             open_orders.append({"symbol": str(o.symbol), "side": str(o.side).split(".")[-1].lower(),
-                                "qty": float(o.qty or 0), "status": str(o.status).split(".")[-1].lower()})
+                                "qty": float(o.qty or 0), "status": str(o.status).split(".")[-1].lower(),
+                                "client_order_id": str(getattr(o, "client_order_id", "") or ""),
+                                "order_id": str(o.id)})
     except Exception:  # noqa: BLE001
         pass
     try:
-        for p in fs.client.get_all_positions():
+        for p in fs.positions():
             syms.add(str(p.symbol))
     except Exception:  # noqa: BLE001
         pass
@@ -444,16 +564,18 @@ def _existing_open_symbols(fs: AlpacaFillSource) -> tuple[set, list]:
 
 def build_next_open_queue(strategy: str = "skew_consensus_v22_novix",
                           fills_mode: str = "alpaca_paper", deploy_mult: float = DEPLOY_MULT,
-                          gate_shorts: bool = True, panel_path: pathlib.Path = CLEAN_PANEL) -> dict:
-    """DRY-RUN build of the real next-session book: latest ORATS signal date -> fires ->
-    Stage-2 sizing -> shortability gate (short side) -> reconcile vs open venue orders ->
-    queue. Submits NOTHING (the point is to VIEW the book; demo orders aren't re-fired)."""
+                          gate_shorts: bool = True, panel_path: pathlib.Path = CLEAN_PANEL,
+                          fs: "FillSource | None" = None) -> dict:
+    """Build the real next-session book: latest ORATS signal date -> fires -> Stage-2
+    sizing -> shortability gate (short side) -> reconcile vs open venue orders -> queue.
+    READ-ONLY (no submit). `fs` may be shared with the submit path so the venue is hit once."""
     last, book = _latest_signal_book(panel_path)
     book, mu, pooled = _size_book(book, panel_path)
     signal_date, next_session = str(last.date()), str((last + pd.offsets.BDay(1)).date())
 
-    fs = (make_fill_source(fills_mode, tif="OPG") if fills_mode != "modeled"
-          else make_fill_source(fills_mode))
+    if fs is None:
+        fs = (make_fill_source(fills_mode, tif="OPG") if fills_mode != "modeled"
+              else make_fill_source(fills_mode))
     equity, existing, open_orders, recon = FALLBACK_EQUITY, set(), [], {"source": "modeled"}
     if isinstance(fs, AlpacaFillSource):
         recon = fs.reconcile({})
@@ -479,7 +601,7 @@ def build_next_open_queue(strategy: str = "skew_consensus_v22_novix",
         qty = max(1, int(notional / px)) if px > 0 else 0
         queue.append({"symbol": sym, "direction": direction, "side": order_side,
                       "qty": qty, "notional": notional, "weight": round(w, 5),
-                      "type": "market", "tif": "OPG",
+                      "ref_price": round(px, 4), "type": "market", "tif": "OPG",
                       "status": "already_open" if sym in existing else "queued",
                       "expected_fill_session": next_session})
 
@@ -507,68 +629,399 @@ def build_next_open_queue(strategy: str = "skew_consensus_v22_novix",
             "fills_mode": fills_mode, "updated_at": _now()}
 
 
-def _write_next_open_queue(strategy: str, qstate: dict) -> None:
-    """Persist the queue: full CSV/JSON + report.json phases.4_paper slice, then re-render."""
+def _sync_paper_report(strategy: str, led: dict, qstate: dict | None = None,
+                       kill_switch: dict | None = None) -> None:
+    """Single writer for the Phase-4 report slice: queue (if given) + owned positions
+    (from the ledger) + kill-switch state, then re-render once."""
     from . import reporter
     out = REPORTS / strategy
     out.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(qstate["next_open_queue"]).to_csv(out / "next_open_queue.csv", index=False)
-    (out / "next_open_queue.json").write_text(json.dumps(qstate, indent=2), encoding="utf-8")
+    if qstate is not None:
+        pd.DataFrame(qstate["next_open_queue"]).to_csv(out / "next_open_queue.csv", index=False)
+        (out / "next_open_queue.json").write_text(json.dumps(qstate, indent=2), encoding="utf-8")
     jpath = out / "report.json"
     if not jpath.exists():
         return
     rep = json.loads(jpath.read_text(encoding="utf-8"))
     p4 = rep.setdefault("phases", {}).setdefault("4_paper", {"status": "not_started", "note": ""})
-    p4["next_open_queue"] = qstate["next_open_queue"]
-    p4["shortability_skipped"] = qstate["shortability_skipped"]
-    p4["queue_meta"] = qstate["queue_meta"]
-    p4["updated_at"] = qstate["updated_at"]
-    rep["updated_at"] = qstate["updated_at"]
+    if qstate is not None:
+        p4["next_open_queue"] = qstate["next_open_queue"]
+        p4["shortability_skipped"] = qstate["shortability_skipped"]
+        p4["queue_meta"] = qstate["queue_meta"]
+    p4["owned_positions"] = _owned_view(led)
+    if kill_switch is not None:
+        p4["kill_switch"] = kill_switch
+        p4["status"] = "paused" if kill_switch.get("state") == "paused" else "deployed"
+    p4["updated_at"] = _now()
+    rep["updated_at"] = _now()
     jpath.write_text(json.dumps(rep, indent=2), encoding="utf-8")
     reporter.render(strategy)
 
 
+# ── ENTRY submission (guarded): caps + ceiling + staleness + idempotency ──
+
+def submit_entries(strategy: str, qstate: dict, fs: FillSource, led: dict, *,
+                   limit: int | None = None, max_notional: float | None = None,
+                   allow_stale: bool = False, max_age_bdays: int = MAX_SIGNAL_AGE_BDAYS) -> dict:
+    """Submit the book LIVE behind every guard. Returns a trace; aborts (submits nothing)
+    if any guard trips. Idempotent: ledger + client_order_id stop double-fires on re-run."""
+    m = qstate["queue_meta"]
+    sig = m["signal_date"]
+    eq = float(m.get("equity") or FALLBACK_EQUITY)
+    res = {"submitted": [], "skipped": [], "aborted": None, "signal_date": sig,
+           "n_orders_cap": limit, "max_notional": max_notional}
+
+    # GATE 1 — kill-switch: never open new risk while paused
+    if led.get("kill_switch_state") == "paused":
+        res["aborted"] = "kill-switch PAUSED — new entries blocked"
+        return res
+    # GATE 2 — staleness: do not fire a stale book by accident
+    age = _signal_age_bdays(sig)
+    if age > max_age_bdays and not allow_stale:
+        res["aborted"] = (f"STALE: signal {sig} is {age} bdays old (> max {max_age_bdays}). Refusing to "
+                          f"fire a stale book; pass --allow-stale for an explicit plumbing test, or wire "
+                          f"the live daily ORATS feed for fresh signals.")
+        return res
+
+    # CEILING — top-N by weight
+    queue = sorted(qstate["next_open_queue"], key=lambda q: -q["weight"])
+    if limit is not None:
+        queue = queue[:limit]
+
+    # build + enforce caps PRE-submit (abort if any cap exceeded)
+    targets, gross_n, net_n = [], 0.0, 0.0
+    for o in queue:
+        sym = o["symbol"]
+        sign = -1 if o["side"] == "sell" else 1
+        coid = _client_order_id(strategy, sym, sig)
+        if o["status"] == "already_open":
+            res["skipped"].append({"symbol": sym, "reason": "already on venue (reconciled)"})
+            continue
+        rec = led.get("positions", {}).get(coid)
+        if rec and rec.get("status") in ("open", "pending"):
+            res["skipped"].append({"symbol": sym, "reason": "already in ledger (idempotent)"})
+            continue
+        px = float(o.get("ref_price") or 0)
+        if px <= 0:
+            res["skipped"].append({"symbol": sym, "reason": "no reference price"})
+            continue
+        if max_notional is not None and px > max_notional:
+            res["skipped"].append({"symbol": sym,
+                                   "reason": f"1 share (${px:,.0f}) exceeds --max-notional ${max_notional:,.0f}"})
+            continue
+        tgt = min(o["notional"], max_notional) if max_notional is not None else o["notional"]
+        qty = max(1, int(tgt / px))
+        order_notional = qty * px
+        if order_notional > SIZING_MAXW * eq + 1.0:                      # per-name 5% cap (hard)
+            res["aborted"] = f"ABORT: {sym} ${order_notional:,.0f} > per-name cap ${SIZING_MAXW*eq:,.0f}"
+            return res
+        gross_n += order_notional
+        net_n += sign * order_notional
+        targets.append((o, coid, sign, qty, px, order_notional))
+    if gross_n > SIZING_GROSS * eq + 1.0:                               # gross cap (hard)
+        res["aborted"] = f"ABORT: slice gross ${gross_n:,.0f} > gross cap ${SIZING_GROSS*eq:,.0f}"
+        return res
+    if abs(net_n) > SIZING_NET * eq + 1.0:                              # net (directional) cap (hard)
+        res["aborted"] = f"ABORT: slice net ${net_n:,.0f} > net cap ${SIZING_NET*eq:,.0f}"
+        return res
+
+    # SUBMIT — idempotent client_order_id; record each in the ledger with its 21-bday exit
+    for o, coid, sign, qty, px, order_notional in targets:
+        sym = o["symbol"]
+        t = TargetPosition(symbol=sym, side=o["direction"], signal_sign=sign, qty=qty,
+                           ref_price=px, entry_date=sig, client_order_id=coid)
+        f = fs.submit(t)
+        if f.status in ("filled", "partial", "accepted"):
+            filled = f.status in ("filled", "partial")
+            base = str(_today().date()) if filled else sig
+            led.setdefault("positions", {})[coid] = {
+                "symbol": sym, "side": str(f.order_side), "signal_sign": sign, "qty": qty,
+                "client_order_id": coid, "entry_signal_date": sig,
+                "entry_submitted_at": f.submitted_at,
+                "entry_fill_date": (str(_today().date()) if filled else None),
+                "entry_status": f.status, "order_id": f.order_id,
+                "scheduled_exit_date": _scheduled_exit(base), "status": "open" if filled else "pending"}
+            res["submitted"].append({"symbol": sym, "side": str(f.order_side), "qty": qty,
+                                     "status": f.status, "order_id": f.order_id, "coid": coid,
+                                     "notional": round(order_notional, 2),
+                                     "scheduled_exit_date": _scheduled_exit(base)})
+        elif f.status == "duplicate":
+            res["skipped"].append({"symbol": sym, "reason": "duplicate client_order_id (idempotent)"})
+        elif f.status == "skipped_not_shortable":
+            res["skipped"].append({"symbol": sym, "reason": f"not shortable ({f.note})"})
+        else:
+            res["skipped"].append({"symbol": sym, "reason": f"{f.status}: {f.note}"})
+    return res
+
+
+# ── EXIT + kill-switch ────────────────────────────────────────────────────
+
+def _kill_switch(fs: FillSource, led: dict, equity: float, simulate_dd: float | None,
+                 dd_pause: float, dd_resume: float, dd_hard: float) -> dict:
+    """Rolling peak-to-current drawdown -> state machine (hysteresis). pause>=15%, resume<7%,
+    hard-flatten>=25%. `simulate_dd` overrides DD for a (non-persisted) live test."""
+    series = fs.equity_series() if isinstance(fs, AlpacaFillSource) else []
+    candidates = [equity] + ([led["peak_equity"]] if led.get("peak_equity") else []) + list(series or [])
+    peak = max(candidates) if candidates else equity
+    dd = (equity / peak - 1.0) if peak > 0 else 0.0
+    simulated = simulate_dd is not None
+    if simulated:
+        dd = -abs(float(simulate_dd))
+    prev = led.get("kill_switch_state", "deployed")
+    hard = dd <= -dd_hard
+    if hard:
+        state = "paused"
+    elif prev == "paused":
+        state = "deployed" if dd > -dd_resume else "paused"
+    else:
+        state = "paused" if dd <= -dd_pause else "deployed"
+    led["peak_equity"] = peak
+    return {"state": state, "drawdown_pct": round(dd * 100, 2), "equity": equity, "peak_equity": peak,
+            "hard_breach": bool(hard), "simulated": simulated,
+            "dd_pause_pct": dd_pause * 100, "dd_resume_pct": dd_resume * 100, "dd_hard_pct": dd_hard * 100,
+            "note": ("SIMULATED drawdown (test only; not persisted)" if simulated
+                     else "rolling peak-to-current drawdown from account equity")}
+
+
+def _exit_one(fs: FillSource, led: dict, coid: str, positions: dict, open_by_coid: dict,
+              submit: bool, actions: list, reason: str) -> None:
+    """Flatten ONE owned record via API: close a filled position OR cancel its still-open entry
+    order. Only ever acts on OUR ledger record (matched by symbol/client_order_id)."""
+    r = led["positions"][coid]
+    sym, sign = r["symbol"], int(r.get("signal_sign", 1))
+    pos = positions.get(sym)
+    if pos is not None and abs(float(pos.qty)) > 0:                     # filled -> close via API
+        if submit and isinstance(fs, AlpacaFillSource):
+            f = fs.close(sym, abs(float(pos.qty)), 1 if float(pos.qty) > 0 else -1)
+            r["status"] = "closed" if f.status in ("accepted", "filled") else r["status"]
+            r["exit_submitted_at"], r["exit_status"], r["exit_order_id"] = _now(), f.status, f.order_id
+            actions.append({"symbol": sym, "action": "close_position", "reason": reason,
+                            "status": f.status, "submitted": True})
+        else:
+            actions.append({"symbol": sym, "action": "would_close_position", "reason": reason,
+                            "submitted": False})
+        return
+    o = open_by_coid.get(coid)
+    if o is not None:                                                  # not filled -> cancel entry order
+        if submit and isinstance(fs, AlpacaFillSource):
+            ok = fs.cancel(str(o.id))
+            r["status"] = "closed" if ok else r["status"]
+            r["exit_submitted_at"], r["exit_status"] = _now(), ("canceled" if ok else "cancel_failed")
+            actions.append({"symbol": sym, "action": "cancel_open_order", "reason": reason,
+                            "status": r["exit_status"], "submitted": True})
+        else:
+            actions.append({"symbol": sym, "action": "would_cancel_open_order", "reason": reason,
+                            "submitted": False})
+        return
+    if submit:                                                         # nothing on venue -> reconcile flat
+        r["status"], r["exit_status"], r["exit_submitted_at"] = "closed", "already_flat", _now()
+    actions.append({"symbol": sym, "action": "already_flat", "reason": reason, "submitted": submit})
+
+
+def manage(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "alpaca_paper",
+           submit: bool = False, force_exit: str | None = None, simulate_dd: float | None = None,
+           dd_pause: float = DD_PAUSE, dd_resume: float = DD_RESUME, dd_hard: float = DD_HARD) -> dict:
+    """Daily-runnable, idempotent exit + kill-switch runner. Reconciles vs Alpaca, closes owned
+    positions whose 21-bday hold elapsed, and acts the drawdown kill-switch (pause/flatten) — all
+    via API. Phase-5 live = same path (fills=alpaca_live). DRY-RUN unless --submit."""
+    fs = (make_fill_source(fills_mode, tif="DAY") if fills_mode != "modeled"
+          else make_fill_source(fills_mode))
+    led = _load_ledger(strategy)
+    today = str(_today().date())
+
+    # RECONCILE before any action
+    equity, positions, open_by_coid = FALLBACK_EQUITY, {}, {}
+    if isinstance(fs, AlpacaFillSource):
+        equity = float(fs.account().equity)
+        positions = {p.symbol: p for p in fs.positions()}
+        for o in fs.open_orders():
+            open_by_coid[str(getattr(o, "client_order_id", "") or "")] = o
+
+    # refresh fills: a pending entry that now shows a position becomes open + schedules its exit
+    for coid, r in led.get("positions", {}).items():
+        if r.get("status") == "pending" and r["symbol"] in positions:
+            r["status"], r["entry_fill_date"] = "open", today
+            r["scheduled_exit_date"] = _scheduled_exit(today)
+
+    ks = _kill_switch(fs, led, equity, simulate_dd, dd_pause, dd_resume, dd_hard)
+    actions: list = []
+
+    if ks["hard_breach"]:                                              # hard breach -> flatten owned
+        for coid, r in list(led.get("positions", {}).items()):
+            if r.get("status") in ("open", "pending"):
+                _exit_one(fs, led, coid, positions, open_by_coid, submit, actions, "kill-switch HARD flatten")
+    for coid, r in list(led.get("positions", {}).items()):            # scheduled 21-bday exits
+        if r.get("status") in ("open", "pending") and r.get("scheduled_exit_date") and r["scheduled_exit_date"] <= today:
+            _exit_one(fs, led, coid, positions, open_by_coid, submit, actions, "scheduled 21bd exit")
+    if force_exit:                                                     # manual close (testing the close path)
+        want = None if force_exit.lower() == "all" else {s.strip().upper() for s in force_exit.split(",")}
+        for coid, r in list(led.get("positions", {}).items()):
+            if r.get("status") in ("open", "pending") and (want is None or r["symbol"] in want):
+                _exit_one(fs, led, coid, positions, open_by_coid, submit, actions, "force-exit")
+
+    if not ks["simulated"]:        # a simulated DD is a console-only test — don't poison real state
+        led["kill_switch_state"] = ks["state"]
+    _save_ledger(strategy, led)
+    # a simulated run is a demonstration: update owned positions but leave the report's
+    # persisted kill-switch on its last REAL value (don't write a fake paused state).
+    _sync_paper_report(strategy, led, kill_switch=None if ks["simulated"] else ks)
+
+    owned = _owned_view(led)
+    sim = " (SIMULATED)" if ks["simulated"] else ""
+    print(f"[manage] {strategy} {'SUBMIT' if submit else 'DRY-RUN'} | kill-switch {ks['state'].upper()}{sim} "
+          f"DD {ks['drawdown_pct']}% (pause -{ks['dd_pause_pct']:.0f}% / hard -{ks['dd_hard_pct']:.0f}%) | "
+          f"equity ${equity:,.0f} peak ${ks['peak_equity']:,.0f}")
+    print(f"[manage] owned open: {len(owned)} | actions: {len(actions)}")
+    for a in actions:
+        print(f"   {a['action']:<22} {a['symbol']:<6} [{a['reason']}] {a.get('status','')}")
+    if not actions:
+        print("   (no exits due; nothing to flatten)")
+    print(f"[manage] ledger {len(led.get('positions', {}))} record(s); report.json phases.4_paper updated + re-rendered")
+    return {"kill_switch": ks, "actions": actions, "owned": owned}
+
+
+# ── demo cleanup (the 3 OPG demo orders are NOT strategy positions) ───────
+
+def clean_demos(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "alpaca_paper",
+                symbols: tuple = ("CERY", "VTIP", "ELME"), submit: bool = False) -> dict:
+    """Cancel (or close, if filled) the demo orders so the account starts clean. SAFETY: never
+    touches an order whose client_order_id is in our ledger. DRY-RUN unless --submit."""
+    fs = (make_fill_source(fills_mode, tif="DAY") if fills_mode != "modeled"
+          else make_fill_source(fills_mode))
+    led = _load_ledger(strategy)
+    ours = set(led.get("positions", {}).keys())
+    symset = {s.upper() for s in symbols}
+    acted: list = []
+    if isinstance(fs, AlpacaFillSource):
+        for o in fs.open_orders():
+            sym = str(o.symbol)
+            if sym not in symset:
+                continue
+            if str(getattr(o, "client_order_id", "") or "") in ours:   # SAFETY: never cancel our tracked orders
+                acted.append({"symbol": sym, "action": "skip_ours", "submitted": False})
+                continue
+            if submit:
+                ok = fs.cancel(str(o.id))
+                acted.append({"symbol": sym, "action": "cancel_order", "ok": ok, "submitted": True})
+            else:
+                acted.append({"symbol": sym, "action": "would_cancel_order", "submitted": False})
+        pos = {p.symbol: p for p in fs.positions()}
+        for sym in symset:
+            if sym in pos:
+                if submit:
+                    f = fs.close(sym, abs(float(pos[sym].qty)), 1 if float(pos[sym].qty) > 0 else -1)
+                    acted.append({"symbol": sym, "action": "close_position", "status": f.status, "submitted": True})
+                else:
+                    acted.append({"symbol": sym, "action": "would_close_position", "submitted": False})
+    print(f"[clean-demos] {'SUBMIT' if submit else 'DRY-RUN'} symbols={sorted(symset)}:")
+    for a in acted:
+        print(f"   {a['action']:<22} {a['symbol']} {('ok=' + str(a['ok'])) if 'ok' in a else a.get('status', '')}")
+    if not acted:
+        print("   (no demo orders/positions found — account already clean)")
+    return {"acted": acted}
+
+
 def run_queue(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "alpaca_paper",
-              deploy_mult: float = DEPLOY_MULT, gate_shorts: bool = True) -> dict:
-    q = build_next_open_queue(strategy, fills_mode, deploy_mult, gate_shorts)
-    _write_next_open_queue(strategy, q)
+              deploy_mult: float = DEPLOY_MULT, gate_shorts: bool = True, submit: bool = False,
+              limit: int | None = None, max_notional: float | None = None, allow_stale: bool = False,
+              max_age_bdays: int = MAX_SIGNAL_AGE_BDAYS) -> dict:
+    """Build the real next-open book (read-only) and, with --submit, fire it LIVE behind every guard."""
+    fs = (make_fill_source(fills_mode, tif="OPG") if fills_mode != "modeled"
+          else make_fill_source(fills_mode))
+    led = _load_ledger(strategy)
+    q = build_next_open_queue(strategy, fills_mode, deploy_mult, gate_shorts, fs=fs)
     m = q["queue_meta"]
+    sub_res = None
+    if submit:
+        sub_res = submit_entries(strategy, q, fs, led, limit=limit, max_notional=max_notional,
+                                 allow_stale=allow_stale, max_age_bdays=max_age_bdays)
+        _save_ledger(strategy, led)
+        m["submitted"] = bool(sub_res and not sub_res["aborted"] and sub_res["submitted"])
+        m["mode"] = "submit"
+    _sync_paper_report(strategy, led, qstate=q)
+
     recon = ", ".join(o["symbol"] for o in m["reconciled_open_orders"]) or "none"
     print(f"[queue] {strategy}: signal {m['signal_date']} -> fills {m['next_session']} | "
           f"{m['n_queued']} queued ({m['n_long']}L/{m['n_short']}S), "
           f"{m['n_skipped_non_shortable']}/{m['n_shorts_gated']} shorts non-shortable | "
           f"gross {m['gross_weight']} net {m['net_weight']} | equity ${m['equity']:,.0f} deploy {deploy_mult}x")
-    print(f"[queue] reconciled vs {len(m['reconciled_open_orders'])} open venue order(s) [{recon}]; "
-          f"DRY-RUN (nothing submitted)")
-    print(f"[queue] LIVE-FEED GAP: {m['live_feed']['gap']}")
-    print(f"[queue] wrote reports/{strategy}/next_open_queue.csv + report.json phases.4_paper + report.html")
-    return q
+    print(f"[queue] reconciled vs {len(m['reconciled_open_orders'])} open venue order(s) [{recon}]")
+    if submit and sub_res:
+        if sub_res["aborted"]:
+            print(f"[queue] SUBMIT ABORTED (guard tripped): {sub_res['aborted']}")
+        else:
+            print(f"[queue] SUBMITTED {len(sub_res['submitted'])} entr(ies); skipped {len(sub_res['skipped'])}:")
+            for s in sub_res["submitted"]:
+                print(f"   + {s['side']:>4} {s['symbol']:<6} qty={s['qty']} ${s['notional']:,.0f} "
+                      f"status={s['status']} exit~{s['scheduled_exit_date']} coid={s['coid']}")
+            for s in sub_res["skipped"][:8]:
+                print(f"   - skip {s['symbol']:<6} {s['reason']}")
+    else:
+        print(f"[queue] DRY-RUN (no --submit). LIVE-FEED GAP: {m['live_feed']['gap']}")
+    print(f"[queue] wrote next_open_queue.csv + report.json phases.4_paper + report.html | "
+          f"ledger {len(led.get('positions', {}))} record(s)")
+    return {"queue": q, "submit": sub_res}
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="quant_validator.fills")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    pr = sub.add_parser("run")
+    _choices = ["modeled", "alpaca_paper", "alpaca_live"]
+
+    pr = sub.add_parser("run", help="legacy demo book (tail-N fires)")
     pr.add_argument("--strategy", default="skew_consensus_v22_novix")
-    pr.add_argument("--fills", default="alpaca_paper", choices=["modeled", "alpaca_paper", "alpaca_live"])
+    pr.add_argument("--fills", default="alpaca_paper", choices=_choices)
     pr.add_argument("--submit", action="store_true", help="actually submit the demo book (paper)")
     pr.add_argument("--limit", type=int, default=5)
     pr.add_argument("--sample", type=int, default=50, help="# short symbols to gate for the coverage stat")
     pr.add_argument("--tif", default="OPG", choices=["OPG", "DAY"])
-    pq = sub.add_parser("queue", help="build + view the REAL next-open trade queue (dry-run)")
+
+    pq = sub.add_parser("queue", help="build the real next-open book; --submit fires entries (guarded)")
     pq.add_argument("--strategy", default="skew_consensus_v22_novix")
-    pq.add_argument("--fills", default="alpaca_paper", choices=["modeled", "alpaca_paper", "alpaca_live"])
+    pq.add_argument("--fills", default="alpaca_paper", choices=_choices)
     pq.add_argument("--deploy-mult", type=float, default=DEPLOY_MULT)
-    pq.add_argument("--no-gate", action="store_true",
-                    help="skip the live shortability gate (faster, but the short book is unverified)")
+    pq.add_argument("--no-gate", action="store_true", help="skip the live shortability gate")
+    pq.add_argument("--submit", action="store_true", help="LIVE: actually submit entries (default DRY-RUN)")
+    pq.add_argument("--limit", type=int, default=None, help="SAFETY: at most N orders (top by weight)")
+    pq.add_argument("--max-notional", type=float, default=None, help="SAFETY: per-order max $ notional")
+    pq.add_argument("--allow-stale", action="store_true", help="override the staleness guard (explicit test)")
+    pq.add_argument("--max-signal-age", type=int, default=MAX_SIGNAL_AGE_BDAYS)
+
+    pm = sub.add_parser("manage", help="daily: scheduled exits + drawdown kill-switch (idempotent)")
+    pm.add_argument("--strategy", default="skew_consensus_v22_novix")
+    pm.add_argument("--fills", default="alpaca_paper", choices=_choices)
+    pm.add_argument("--submit", action="store_true", help="LIVE: actually submit closes/cancels (default DRY-RUN)")
+    pm.add_argument("--force-exit", default=None, help="'all' or comma symbols: close NOW (tests the close path)")
+    pm.add_argument("--simulate-dd", type=float, default=None, help="TEST: override drawdown e.g. 0.20 (not persisted)")
+    pm.add_argument("--dd-pause", type=float, default=DD_PAUSE)
+    pm.add_argument("--dd-hard", type=float, default=DD_HARD)
+    pm.add_argument("--dd-resume", type=float, default=DD_RESUME)
+
+    pc = sub.add_parser("clean-demos", help="cancel/close the 3 open demo orders (not strategy positions)")
+    pc.add_argument("--strategy", default="skew_consensus_v22_novix")
+    pc.add_argument("--fills", default="alpaca_paper", choices=_choices)
+    pc.add_argument("--symbols", default="CERY,VTIP,ELME")
+    pc.add_argument("--submit", action="store_true", help="LIVE: actually cancel/close (default DRY-RUN)")
+
     args = ap.parse_args(argv)
     if args.cmd == "run":
         run(strategy=args.strategy, fills_mode=args.fills, submit=args.submit,
             limit=args.limit, sample=args.sample, tif=args.tif)
         return 0
     if args.cmd == "queue":
-        run_queue(strategy=args.strategy, fills_mode=args.fills,
-                  deploy_mult=args.deploy_mult, gate_shorts=not args.no_gate)
+        run_queue(strategy=args.strategy, fills_mode=args.fills, deploy_mult=args.deploy_mult,
+                  gate_shorts=not args.no_gate, submit=args.submit, limit=args.limit,
+                  max_notional=args.max_notional, allow_stale=args.allow_stale,
+                  max_age_bdays=args.max_signal_age)
+        return 0
+    if args.cmd == "manage":
+        manage(strategy=args.strategy, fills_mode=args.fills, submit=args.submit,
+               force_exit=args.force_exit, simulate_dd=args.simulate_dd,
+               dd_pause=args.dd_pause, dd_resume=args.dd_resume, dd_hard=args.dd_hard)
+        return 0
+    if args.cmd == "clean-demos":
+        clean_demos(strategy=args.strategy, fills_mode=args.fills,
+                    symbols=tuple(s.strip() for s in args.symbols.split(",")), submit=args.submit)
         return 0
     return 1
 
