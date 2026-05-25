@@ -1,0 +1,92 @@
+============================================================================================
+2020 REGIME-INVERSION DIAGNOSIS — ex-ante market-regime conditioner test
+============================================================================================
+Pooled 21d edge = +18.3 bps but inverts in 2020 (-41.9 bps, z=-5.06) while 2021
+(+109) / 2023 (+83) — also high-vol — stay strongly positive. Q: is there an
+EX-ANTE (known-at-entry) SPY regime variable that separates 2020's losers from
+those winners WITHOUT killing the 9 good years? Per-fire edge = sign*(fwd21 -
+date-matched pool mean). All regime features are trailing-only (no look-ahead).
+
+-- 21d EDGE by regime-feature quintile (Q0=low ... Q4=high) ---------------------------
+            feature |  q |           feat range |       n | edge(bps) |      t | abs_net(bps)
+  --------------------------------------------------------------------------------------
+            ret_21d |  0 |      [-0.331,-0.051] |  95,436 |     +34.3 |  +7.35 |       +222.0
+            ret_21d |  1 |      [-0.051,-0.016] |  95,218 |     +24.1 |  +5.66 |       +134.8
+            ret_21d |  2 |      [-0.016,+0.010] |  94,623 |     +19.7 |  +4.36 |        +72.7
+            ret_21d |  3 |      [+0.010,+0.033] |  95,131 |      -2.4 |  -0.44 |        +18.2
+            ret_21d |  4 |      [+0.033,+0.252] |  95,022 |     +15.4 |  +2.66 |        +84.3
+
+            ret_63d |  0 |      [-0.305,-0.063] |  95,318 |     +34.0 |  +6.80 |       +484.9
+            ret_63d |  1 |      [-0.063,-0.008] |  95,508 |      +6.9 |  +1.55 |        -47.8
+            ret_63d |  2 |      [-0.008,+0.031] |  94,444 |     +17.4 |  +3.97 |        +39.8
+            ret_63d |  3 |      [+0.031,+0.062] |  95,139 |     +16.4 |  +3.37 |        +20.2
+            ret_63d |  4 |      [+0.062,+0.393] |  95,021 |     +16.6 |  +2.79 |        +35.0
+
+           rvol_21d |  0 |      [+0.035,+0.101] |  95,151 |     +31.0 |  +6.04 |        +52.6
+           rvol_21d |  1 |      [+0.102,+0.134] |  95,080 |      +9.1 |  +1.80 |        +27.1
+           rvol_21d |  2 |      [+0.134,+0.182] |  95,093 |     +31.1 |  +6.30 |        +58.4
+           rvol_21d |  3 |      [+0.182,+0.244] |  95,245 |      +8.6 |  +1.96 |        +89.9
+           rvol_21d |  4 |      [+0.244,+0.933] |  94,861 |     +11.5 |  +2.18 |       +305.1
+
+             dd_252 |  0 |      [-0.341,-0.105] |  96,240 |     +36.7 |  +6.82 |       +431.8
+             dd_252 |  1 |      [-0.105,-0.059] |  93,948 |     -11.3 |  -2.69 |        -43.0
+             dd_252 |  2 |      [-0.059,-0.026] |  95,123 |     +40.0 |  +9.25 |       +129.0
+             dd_252 |  3 |      [-0.026,-0.006] |  95,047 |     +10.4 |  +2.12 |         -0.8
+             dd_252 |  4 |      [-0.006,+0.000] |  95,072 |     +14.9 |  +2.59 |         +9.9
+
+  rebound_off_low63 |  0 |      [+0.000,+0.021] |  95,530 |     +36.0 |  +8.21 |       +165.1
+  rebound_off_low63 |  1 |      [+0.021,+0.047] |  94,706 |     +13.0 |  +3.06 |        +89.3
+  rebound_off_low63 |  2 |      [+0.047,+0.069] |  95,117 |     +15.2 |  +3.33 |        +34.7
+  rebound_off_low63 |  3 |      [+0.069,+0.104] |  95,069 |     +31.4 |  +6.06 |        +75.6
+  rebound_off_low63 |  4 |      [+0.104,+0.450] |  95,008 |      -4.5 |  -0.72 |       +167.6
+
+         vol_chg_21 |  0 |      [-0.636,-0.039] |  95,166 |     +15.0 |  +2.86 |       +155.9
+         vol_chg_21 |  1 |      [-0.039,-0.002] |  95,159 |     +25.9 |  +5.14 |        +62.3
+         vol_chg_21 |  2 |      [-0.001,+0.030] |  95,232 |     +13.9 |  +2.83 |        +82.2
+         vol_chg_21 |  3 |      [+0.030,+0.084] |  94,838 |     +14.6 |  +2.98 |        +40.6
+         vol_chg_21 |  4 |      [+0.084,+0.719] |  95,035 |     +21.9 |  +4.66 |       +191.7
+
+-- 2020 vs winners: entry-date regime profile (mean) ---------------------------------
+            year |        n_fires |       edge_bps |    abs_net_bps |   ret_21d_mean |   ret_63d_mean |  rvol_21d_mean |    dd_252_mean | rebound_off_low63_mean | vol_chg_21_mean
+            2019 |          26703 |        +87.836 |       +191.422 |         +0.003 |         +0.018 |         +0.149 |         -0.040 |         +0.078 |         +0.007
+            2020 |          53215 |        -41.948 |       +120.085 |         -0.037 |         -0.027 |         +0.396 |         -0.130 |         +0.151 |         +0.112
+            2021 |          13642 |       +109.088 |        +64.529 |         +0.010 |         +0.059 |         +0.140 |         -0.014 |         +0.087 |         +0.034
+            2022 |          56774 |         +2.373 |        +55.081 |         -0.036 |         -0.062 |         +0.242 |         -0.144 |         +0.039 |         +0.015
+            2023 |          19520 |        +83.009 |       +165.118 |         +0.008 |         +0.028 |         +0.136 |         -0.067 |         +0.071 |         -0.012
+            2024 |          45765 |        +23.334 |       +118.496 |         +0.013 |         +0.063 |         +0.128 |         -0.018 |         +0.087 |         +0.010
+            2025 |          54042 |        +34.432 |       +154.284 |         -0.009 |         +0.002 |         +0.213 |         -0.052 |         +0.074 |         +0.055
+
+-- CANDIDATE CONDITIONER + COUNTERFACTUAL --------------------------------------------
+  rule: GATE fires on dates where SPY rvol_21d is HIGH (>= +0.2252, the 90th pctl of market days)
+  fires: 475,430 total -> kept 360,776 / blocked 114,654 (24.1%)
+  BLOCKED alpha: abs_net=+294.3 bps, edge=+14.2 bps  (must be <= ~0 — strongly positive => VIX-filter mistake)
+  KEPT alpha   : abs_net=+46.8 bps, edge=+19.5 bps
+
+  per-year 21d increment (bps): baseline -> conditioned
+    year |     base |     cond | delta
+    2019 |    +88.0 |    +88.6 |    +0.6
+    2020 |    -41.9 |    -91.1 |   -49.2
+    2021 |   +109.1 |   +109.1 |    +0.0
+    2023 |    +83.0 |    +83.0 |    +0.0
+    2024 |    +23.3 |    +23.3 |    +0.0
+    2025 |    +34.3 |    +14.5 |   -19.8
+
+-- DRAWDOWN the sizing/kill-switch must tolerate -------------------------------------
+  worst year : 2015 at -6.7 bps/trade mean 21d signal return
+  worst month: 2021-01 at -967.6 bps/trade mean 21d signal return
+  (per-trade mean; 21d holds overlap so treat as attribution, not an equity curve.)
+
+-- VERDICT / RECOMMENDATION ----------------------------------------------------------
+  2020 edge: base -41.9 -> conditioned -91.1 bps  (softened=False)
+  winners (2019/21/23) retained >=70%: True
+  blocked-trade abs_net = +294.3 bps -> VIX-FILTER MISTAKE (discards profitable trades)
+
+  VERDICT: NO ROBUST CONDITIONER (n=1).
+  - The tested gate (SPY rvol_21d high, 90th pctl) BACKFIRED — 2020 edge WORSENED (-41.9 -> -91.1 bps) and blocked trades whose mean abs_net was +294 bps -> profitable trades discarded (VIX-filter mistake).
+  - 2020 fires sit in regime buckets with POSITIVE absolute return (2020 abs_net +120 bps/trade): it was a SELECTION miss in a V-recovery where the random
+    pool rose even MORE, NOT an absolute loss. Any gate that catches 2020 throws
+    away profit, so no ex-ante regime rule helps on this single event.
+  RECOMMEND: ACCEPT the signal, SIZE-TO-SURVIVE, add a DRAWDOWN KILL-SWITCH.
+  Kill-switch must tolerate: worst month 2021-01 (-968 bps/trade, the meme squeeze) and 2020's 21d edge
+  inversion (-41.9 bps vs random). Both are survivable in ABSOLUTE terms; the
+  kill-switch caps tail risk, it does not 'fix' the selection miss.
