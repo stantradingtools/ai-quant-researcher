@@ -382,12 +382,27 @@ def run_vs_random(
 ) -> dict:
     """Run the available Vs. Random tiers for a thesis and write vs_random.json."""
     results_dir = thesis_dir / "results"
+
+    # Fires-aware passthrough: the Mode-A backtest adapter (quant_validator.backtest)
+    # already produces the canonical date/direction-matched verdict for a fires-frame
+    # strategy. Report it as-is rather than recomputing the timing-permutation Tier A,
+    # which is the wrong test for a cross-sectional fires strategy.
+    _adapter = results_dir / "vs_random.json"
+    if _adapter.exists():
+        try:
+            _prev = json.loads(_adapter.read_text())
+            if _prev.get("source") == "fires_adapter":
+                return _prev
+        except json.JSONDecodeError:
+            pass
+
     pos_path = results_dir / "positions.csv"
     ret_path = results_dir / "returns.csv"
     asset_path = results_dir / "asset_returns.csv"  # optional explicit input
 
     if not pos_path.exists() or not ret_path.exists():
-        return {"status": "error", "reason": f"missing positions.csv/returns.csv in {results_dir}"}
+        return {"status": "not_available",
+                "reason": f"no fires-adapter verdict and missing positions.csv/returns.csv in {results_dir}"}
 
     positions = pd.read_csv(pos_path, index_col=0, parse_dates=True)
     if positions.shape[1] > 1:

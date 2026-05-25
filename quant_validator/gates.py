@@ -48,7 +48,7 @@ def _read_json(path: Path) -> dict | None:
 def gate_deflated_sharpe(thesis_dir: Path, pvalue_max: float = DSR_PVALUE_MAX) -> dict:
     dsr = _read_json(thesis_dir / "results" / "dsr.json")
     if not dsr or dsr.get("status") != "ok":
-        return {"gate": "deflated_sharpe", "verdict": "fail",
+        return {"gate": "deflated_sharpe", "verdict": "not_available",
                 "reason": "dsr.json missing or insufficient data — run stats first"}
     pval = dsr.get("dsr_pvalue", 1.0)
     verdict = "pass" if pval < pvalue_max else "fail"
@@ -106,8 +106,8 @@ def gate_pca_concentration(thesis_dir: Path, conc_max: float = PCA_CONCENTRATION
     """
     pos_path = thesis_dir / "results" / "positions.csv"
     if not pos_path.exists():
-        return {"gate": "pca_concentration", "verdict": "fail",
-                "reason": "positions.csv missing"}
+        return {"gate": "pca_concentration", "verdict": "not_available",
+                "reason": "positions.csv missing — run the backtest adapter first"}
     pos = pd.read_csv(pos_path, index_col=0, parse_dates=True)
     if pos.shape[1] <= 1:
         return {"gate": "pca_concentration", "verdict": "pass",
@@ -138,8 +138,8 @@ def gate_pca_concentration(thesis_dir: Path, conc_max: float = PCA_CONCENTRATION
 def gate_vs_random(thesis_dir: Path) -> dict:
     vr = _read_json(thesis_dir / "results" / "vs_random.json")
     if not vr or vr.get("status") != "ok":
-        return {"gate": "vs_random", "verdict": "warning",
-                "reason": "vs_random.json missing — run vs_random first (Step 6.5)"}
+        return {"gate": "vs_random", "verdict": "not_available",
+                "reason": "vs_random.json missing — run the backtest adapter / vs_random (Step 6.5)"}
     overall = vr.get("overall_verdict", "warning")
     tier_a = vr.get("tiers", {}).get("A", {})
     verdict = {"pass": "pass", "warning": "warning", "fail": "fail"}.get(overall, "warning")
@@ -170,13 +170,17 @@ def evaluate(thesis_id: str,
     }
     any_fail = any(g["verdict"] == "fail" for g in gates.values())
     any_warning = any(g["verdict"] == "warning" for g in gates.values())
-    overall = "fail" if any_fail else ("warning" if any_warning else "pass")
+    any_na = any(g["verdict"] == "not_available" for g in gates.values())
+    # not_available (missing upstream artifact) is NOT a fail — distinguish it.
+    overall = ("fail" if any_fail else "warning" if any_warning
+               else "not_available" if any_na else "pass")
 
     payload = {
         "status": "ok",
         "overall": overall,
         "gates": gates,
         "first_failure": next((k for k, g in gates.items() if g["verdict"] == "fail"), None),
+        "not_available": [k for k, g in gates.items() if g["verdict"] == "not_available"],
     }
     (thesis_dir / "gates_outcome.json").write_text(json.dumps(payload, indent=2))
     return payload

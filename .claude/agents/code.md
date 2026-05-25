@@ -12,7 +12,22 @@ from a features DataFrame.
 
 CONTRACT (non-negotiable):
 
-A) For OPTIONS theses (refined.json["market_type"] == "options"):
+>> CANONICAL CONTRACT = the FIRES FRAME (see .claude/skills/strategy-authoring/SKILL.md).
+   strategy(panel) returns one row per fire: columns at least
+     symbol, date, side (BULL/BEAR), signal_sign (BULL->-1 short, BEAR->+1 long),
+     and the forward returns fwd_5/fwd_10/fwd_21, plus any spec stage flags (M1/M2/M3).
+   This is what the Mode-A backtest adapter (quant_validator.backtest) consumes: it wraps
+   signal_vs_random.run_test and emits the canonical results/ artifacts for every
+   downstream stage. Emit RAW fires (do NOT pre-screen — the $1/eligibility screen lives
+   ONCE in run_test). This is THE contract; use it for panel / cross-sectional strategies.
+
+   CHANGE NOTE (2026-05-25): code.md previously specified a positions Series in [-1,1] as
+   the only output. That positions-x-returns shape broke the panel pipeline (Stages 6-10).
+   The fires frame above is now canonical and is what produced parity on skew-consensus.
+   The legacy positions shapes (A/B/C below) remain ONLY for genuine single-asset price
+   strategies fed to the old vectorized engine; new panel work uses the fires frame.
+
+A) [LEGACY single-asset] For OPTIONS theses (refined.json["market_type"] == "options"):
    def strategy(features: pd.DataFrame) -> tuple[pd.Series, pd.DataFrame]:
        # returns: (positions, greeks)
        # positions: index matches features, values in [-1, 1]

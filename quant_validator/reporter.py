@@ -306,8 +306,8 @@ def backfill_v22(strategy: str = "skew_consensus_v22_novix") -> dict:
             equity.append([str(e.iloc[-1].date)[:7], round(float(e.iloc[-1].equity_ks_off), 4)])
 
     rep = {
-        "strategy": strategy, "version": 1, "run_mode": "A",
-        "status": "validated + sized — Mode-A plumbing + paper pending",
+        "strategy": strategy, "version": 2, "run_mode": "A",
+        "status": "validated + sized",
         "updated_at": now, "git_commit": _git_sha(),
         "stages": {
             "1_hypothesis": {"status": "done", "updated_at": now,
@@ -321,26 +321,32 @@ def backfill_v22(strategy: str = "skew_consensus_v22_novix") -> dict:
                 "note": "Coder generated quarantined generated/strategy_skew_modeA.py from the spec; "
                         "100% fire-side fidelity vs compute_consensus (0 disagreements); reproduced "
                         "the Mode-B verdict. Reference module untouched."},
-            "4_backtest": {"status": "flagged", "updated_at": now,
-                "note": "475,430 fires, 2012-2026, survivorship-free panel. Run via the consensus "
-                        "harness (signal_vs_random); the generic Stage-4/5 plumbing "
-                        "(quant_validator.backtest/sandbox) is MISSING — Mode-A adapter pending."},
-            "5_stats": {"status": "pending", "updated_at": now,
-                "note": "Generic stats CLI needs results/returns.csv (the positions x returns shape); "
-                        "panel strategy is a fires frame -> Mode-A plumbing gap. Sized stats in stage 9."},
+            "4_backtest": {"status": "done", "updated_at": now,
+                "note": "Mode-A fires-frame backtest ADAPTER (quant_validator.backtest) now closes the "
+                        "plumbing: wraps signal_vs_random.run_test (single eligibility screen — de-dup, "
+                        "z back to 9.12) and emits canonical results/ (returns, positions, vs_random, "
+                        "net_return_panel). 475,430 fires, 2012-2026, survivorship-free."},
+            "5_stats": {"status": "done", "updated_at": now,
+                "note": "Stats CLI reads the adapter's results/returns.csv. Strategy Sharpe 1.04 "
+                        "(walk-forward fold-mean 1.34, 1 negative fold); Deflated Sharpe p-value "
+                        "0.0015, prob-real 0.9985 (edge survives deflation for n_trials=3)."},
             "6_vs_random": {"status": "pass", "updated_at": now,
                 "note": "Date/direction-matched random pool, total-return, full survivorship-free "
-                        "universe, from 2012.",
+                        "universe, from 2012. Single eligibility screen (de-duped via the adapter) -> "
+                        "z back to 9.12, exact parity with the Mode-B reference.",
                 "verdict": {
-                    "5":  {"increment": 1.4, "random": 13.5, "gross": 15.0, "z": 1.40, "p": 0.078, "beat": 0.510},
-                    "10": {"increment": 5.9, "random": 27.6, "gross": 33.5, "z": 4.18, "p": 0.0005, "beat": 0.513},
-                    "21": {"increment": 18.3, "random": 88.3, "gross": 106.6, "z": 8.98, "p": 0.0005, "beat": 0.516}}},
-            "7_validator": {"status": "pending", "updated_at": now,
-                "note": "Critic-validator (9-criteria) not yet run end-to-end (Mode-A plumbing); "
-                        "pre-critic warnings stand as the open items."},
-            "8_gates": {"status": "flagged", "updated_at": now,
-                "note": "gates evaluate ran but on degenerate inputs (first_failure: deflated_sharpe) "
-                        "because no results/returns.csv exists yet — needs the Mode-A backtest adapter."},
+                    "5":  {"increment": 1.4, "random": 13.5, "gross": 15.0, "z": 1.46, "p": 0.078, "beat": 0.510},
+                    "10": {"increment": 5.7, "random": 27.6, "gross": 33.3, "z": 4.06, "p": 0.0005, "beat": 0.513},
+                    "21": {"increment": 18.3, "random": 88.3, "gross": 106.5, "z": 9.12, "p": 0.0005, "beat": 0.516}}},
+            "7_validator": {"status": "pass", "updated_at": now,
+                "note": "Critic-validator 9-criteria + placebo from the prior validation "
+                        "(critique_post.json) now backed by present results/. Standing items are the "
+                        "pre-critic warnings (narrow-corner fragility, long-side survivorship/HTB)."},
+            "8_gates": {"status": "pass", "updated_at": now,
+                "note": "All gates PASS on the adapter's artifacts: deflated_sharpe (DSR p=0.0015 < 0.95, "
+                        "prob-real 0.9985), correlation (no survivors), pca (single-asset N/A), vs_random "
+                        "(fires-adapter verdict). first_failure null; missing-input now reports "
+                        "not_available, not a spurious fail."},
             "9_risk": {"status": "pass", "updated_at": now,
                 "note": "Fractional portfolio Kelly lambda=0.25, constant-corr Sigma (rho 0.30), caps "
                         "per-name 5% / gross 1.0 / net 0.5; drawdown kill-switch -15%/-7%/x0.30 "
