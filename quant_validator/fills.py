@@ -17,9 +17,17 @@ The PaperTracker manages the book: no simultaneous long+short (flip => close fir
 scheduled ~21-trading-day exits (Alpaca has no native exit-in-N-days). Bracket/trailing
 exits are left as a seam for the Mutation Agent's Bollinger work.
 
-CLI:
-    python -m quant_validator.fills run --strategy skew_consensus_v22_novix \
-        --fills alpaca_paper --submit --limit 5
+CLI (DRY-RUN by default everywhere; live actions require explicit --submit):
+    python -m quant_validator.fills daily        # EOD production loop on the LIVE ORATS feed:
+        #   refresh feed -> manage (exits + kill-switch) -> current-signal queue (staleness
+        #   passes) -> first-day REVIEW GATE (dry-run). Fire with --submit (start graduated):
+        #   ... daily --submit --deploy-fraction 0.25 --limit 10 --max-notional 5000
+    python -m quant_validator.fills manage --submit            # close 21bd expiries + kill-switch
+    python -m quant_validator.fills queue --submit --limit 4 --max-notional 2000  # static-panel book
+    python -m quant_validator.fills clean-demos --submit       # cancel/close the demo orders
+
+Unattended scheduling (Windows Task Scheduler, after-close EOD ~17:15 ET) — see the block
+comment above `daily()` for the exact `schtasks /Create` line. `manage` runs every session.
 """
 
 from __future__ import annotations
@@ -488,6 +496,18 @@ def _scheduled_exit(entry_date: str, hold_bdays: int = HOLD_BDAYS) -> str:
     return str((pd.Timestamp(entry_date) + pd.offsets.BDay(hold_bdays)).date())
 
 
+def _next_session(last: pd.Timestamp) -> str:
+    """Next trading session after `last` — US-holiday-aware so a long weekend (e.g. Memorial
+    Day) isn't shown as the fill date. Falls back to a plain business day if the calendar
+    is unavailable. (Misses market-only closures like Good Friday; OPG fills at the real open.)"""
+    try:
+        from pandas.tseries.holiday import USFederalHolidayCalendar
+        from pandas.tseries.offsets import CustomBusinessDay
+        return str((pd.Timestamp(last) + CustomBusinessDay(calendar=USFederalHolidayCalendar())).date())
+    except Exception:  # noqa: BLE001
+        return str((pd.Timestamp(last) + pd.offsets.BDay(1)).date())
+
+
 def _owned_view(led: dict) -> list[dict]:
     """Open ledger positions with days-held + scheduled exit (for the report's owned table)."""
     import numpy as np
@@ -562,16 +582,41 @@ def _existing_open_symbols(fs: AlpacaFillSource) -> tuple[set, list]:
     return syms, open_orders
 
 
+def _live_signal_book():
+    """Latest LIVE ORATS fires as the queue book (symbol, side, signal_sign, raw_close=clsPx
+    current price). Reads the CSV the live feed (adapters.orats live) wrote, else recomputes.
+    $1 floor; signal date = the latest live session -> the staleness guard passes."""
+    import glob
+    csvs = sorted(glob.glob("data/orats/live_fires_*.csv"))
+    if csvs:
+        lf = pd.read_csv(csvs[-1])
+    else:
+        from adapters import orats as _orats
+        lf = _orats.live_fires()
+    if lf is None or len(lf) == 0:
+        raise RuntimeError("no live fires — run `python -m adapters.orats live` "
+                           "(or `fills daily` with feed refresh) first")
+    last = pd.Timestamp(pd.to_datetime(lf["tradeDate"]).iloc[0])
+    book = (lf.rename(columns={"ticker": "symbol", "clsPx": "raw_close"})
+            .loc[lambda d: d["raw_close"] >= 1.0, ["symbol", "side", "signal_sign", "raw_close"]]
+            .reset_index(drop=True))
+    return last, book
+
+
 def build_next_open_queue(strategy: str = "skew_consensus_v22_novix",
                           fills_mode: str = "alpaca_paper", deploy_mult: float = DEPLOY_MULT,
                           gate_shorts: bool = True, panel_path: pathlib.Path = CLEAN_PANEL,
-                          fs: "FillSource | None" = None) -> dict:
-    """Build the real next-session book: latest ORATS signal date -> fires -> Stage-2
-    sizing -> shortability gate (short side) -> reconcile vs open venue orders -> queue.
-    READ-ONLY (no submit). `fs` may be shared with the submit path so the venue is hit once."""
-    last, book = _latest_signal_book(panel_path)
+                          fs: "FillSource | None" = None, live: bool = False) -> dict:
+    """Build the real next-session book: signal date -> fires -> Stage-2 sizing -> shortability
+    gate (short side) -> reconcile vs open venue orders -> queue. READ-ONLY (no submit). `fs`
+    may be shared with the submit path. `live=True` sources the book from the live ORATS feed
+    (signal = the latest session, so the staleness guard passes); else the static panel."""
+    if live:
+        last, book = _live_signal_book()
+    else:
+        last, book = _latest_signal_book(panel_path)
     book, mu, pooled = _size_book(book, panel_path)
-    signal_date, next_session = str(last.date()), str((last + pd.offsets.BDay(1)).date())
+    signal_date, next_session = str(last.date()), _next_session(last)
 
     if fs is None:
         fs = (make_fill_source(fills_mode, tif="OPG") if fills_mode != "modeled"
@@ -616,13 +661,18 @@ def build_next_open_queue(strategy: str = "skew_consensus_v22_novix",
         "net_weight": round(sum(q["weight"] * (1 if q["side"] == "buy" else -1) for q in queue), 4),
         "mu_per_trade_bps": round(mu * 1e4, 1),
         "reconciled_open_orders": open_orders,
-        "live_feed": {
+        "source": "live" if live else "static",
+        "live_feed": ({
+            "source": "live daily full-universe ORATS pull (adapters.orats)",
+            "is_live_orats": True,
+            "gap": "",
+        } if live else {
             "source": f"STATIC panel {panel_path.as_posix()} (last date {signal_date})",
             "is_live_orats": False,
             "gap": ("No daily ORATS refresh is wired: the 'latest signal date' is the static "
                     "panel's last date, not today's surface. Genuine next-day trading needs a live "
                     "daily ORATS pull (adapters.orats) feeding this loop — that feed is the next gap."),
-        },
+        }),
         "submitted": False, "mode": "dry_run",
     }
     return {"queue_meta": meta, "next_open_queue": queue, "shortability_skipped": skipped,
@@ -924,12 +974,13 @@ def clean_demos(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "a
 def run_queue(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "alpaca_paper",
               deploy_mult: float = DEPLOY_MULT, gate_shorts: bool = True, submit: bool = False,
               limit: int | None = None, max_notional: float | None = None, allow_stale: bool = False,
-              max_age_bdays: int = MAX_SIGNAL_AGE_BDAYS) -> dict:
-    """Build the real next-open book (read-only) and, with --submit, fire it LIVE behind every guard."""
+              max_age_bdays: int = MAX_SIGNAL_AGE_BDAYS, live: bool = False) -> dict:
+    """Build the real next-open book (read-only) and, with --submit, fire it LIVE behind every
+    guard. `live=True` sources the book from the live ORATS feed (signal = latest session)."""
     fs = (make_fill_source(fills_mode, tif="OPG") if fills_mode != "modeled"
           else make_fill_source(fills_mode))
     led = _load_ledger(strategy)
-    q = build_next_open_queue(strategy, fills_mode, deploy_mult, gate_shorts, fs=fs)
+    q = build_next_open_queue(strategy, fills_mode, deploy_mult, gate_shorts, fs=fs, live=live)
     m = q["queue_meta"]
     sub_res = None
     if submit:
@@ -961,6 +1012,77 @@ def run_queue(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "alp
     print(f"[queue] wrote next_open_queue.csv + report.json phases.4_paper + report.html | "
           f"ledger {len(led.get('positions', {}))} record(s)")
     return {"queue": q, "submit": sub_res}
+
+
+# ── DAILY production loop (EOD cadence; the live feed wired end-to-end) ────
+#
+# pull live ORATS -> manage (exits + kill-switch) -> build the current-signal queue
+# (signal = latest session => staleness guard PASSES) -> optional guarded submit.
+#
+# FIRST-DAY REVIEW GATE: DRY-RUN by default. The first real current-signal book is built,
+# written to report.html, and STOPS — it fires only on an explicit --submit after you have
+# eyeballed it. All rails stay on (caps 5%/1.0/0.5, --limit/--max-notional ceiling, idempotent
+# client_order_ids, only-act-on-our-ledger). Graduated rollout via --deploy-fraction.
+#
+# UNATTENDED SCHEDULING (Windows Task Scheduler, after-close EOD trigger ~17:15 ET):
+#   schtasks /Create /TN "skew_daily" /SC DAILY /ST 17:15 /TR ^
+#     "cmd /c cd /d <repo> && python -m quant_validator.fills daily >> logs\daily.log 2>&1"
+#   - DRY-RUN (review-gated) by default; add --submit (and --deploy-fraction) once the live
+#     track looks sane. `manage` runs every session inside `daily`, so exits/kill-switch fire
+#     daily even on non-entry days. Idempotent: a same-day re-run double-fires nothing.
+
+def daily(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "alpaca_paper",
+          submit: bool = False, refresh_feed: bool = True, deploy_fraction: float = 1.0,
+          gate_shorts: bool = True, limit: int | None = None, max_notional: float | None = None,
+          allow_stale: bool = False, dd_pause: float = DD_PAUSE, dd_resume: float = DD_RESUME,
+          dd_hard: float = DD_HARD) -> dict:
+    """The daily production loop on the LIVE ORATS feed. See the block comment above."""
+    eff_deploy = DEPLOY_MULT * deploy_fraction
+    mode = "SUBMIT (LIVE)" if submit else "DRY-RUN (first-day review gate)"
+    print("=" * 78)
+    print(f"[daily] {strategy} | {mode} | deploy {DEPLOY_MULT}x x fraction {deploy_fraction} "
+          f"= {eff_deploy:.4f}x effective | {fills_mode}")
+    print("=" * 78)
+
+    # 1) refresh the live feed (backfill to latest session + rebuild trailing panel + flip is_live)
+    feed = None
+    if refresh_feed:
+        from adapters import orats
+        feed = orats.run_live(strategy=strategy, update_report=True)
+    else:
+        print("[daily] --no-refresh: using the existing live panel / fires (no ORATS pull)")
+
+    # 2) manage FIRST so the kill-switch state + closed expiries are current BEFORE new entries
+    #    (a paused kill-switch must block today's entries; submit_entries reads led state).
+    print("[daily] --- manage (exits + kill-switch) ---")
+    mres = manage(strategy=strategy, fills_mode=fills_mode, submit=submit,
+                  dd_pause=dd_pause, dd_resume=dd_resume, dd_hard=dd_hard)
+
+    # 3) build the current-signal next-open queue from the LIVE panel (signal = latest session)
+    print("[daily] --- queue (current-signal book from the live feed) ---")
+    qres = run_queue(strategy=strategy, fills_mode=fills_mode, deploy_mult=eff_deploy,
+                     gate_shorts=gate_shorts, submit=submit, limit=limit,
+                     max_notional=max_notional, allow_stale=allow_stale, live=True)
+
+    # 4) staleness verdict (visible even in dry-run: proves the guard passes on the current signal)
+    sig = qres["queue"]["queue_meta"]["signal_date"]
+    age = _signal_age_bdays(sig)
+    passes = age <= MAX_SIGNAL_AGE_BDAYS
+    print("=" * 78)
+    print(f"[daily] staleness guard: signal {sig} age {age} bday(s) "
+          f"{'<=' if passes else '>'} max {MAX_SIGNAL_AGE_BDAYS} -> "
+          f"{'PASS — fireable on the current signal' if passes else 'BLOCK (stale)'}")
+    ks = mres["kill_switch"]["state"]
+    print(f"[daily] kill-switch {ks.upper()} | owned open {len(mres['owned'])} | "
+          f"effective deploy {eff_deploy:.4f}x")
+    if not submit:
+        print("[daily] FIRST-DAY REVIEW GATE — DRY-RUN only, nothing fired. Inspect "
+              f"reports/{strategy}/report.html (Phase-4 'Next-open trade queue'), then re-run:")
+        print(f"        python -m quant_validator.fills daily --submit --deploy-fraction 0.25 "
+              f"--limit 10 --max-notional 5000   # start small, scale to full 0.5x when sane")
+    print("=" * 78)
+    return {"feed": feed, "manage": mres, "queue": qres, "signal_date": sig,
+            "staleness_pass": passes, "effective_deploy": eff_deploy, "submitted": submit}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1003,6 +1125,23 @@ def main(argv: list[str] | None = None) -> int:
     pc.add_argument("--symbols", default="CERY,VTIP,ELME")
     pc.add_argument("--submit", action="store_true", help="LIVE: actually cancel/close (default DRY-RUN)")
 
+    pdl = sub.add_parser("daily", help="EOD production loop on the live ORATS feed (first-day review gate)")
+    pdl.add_argument("--strategy", default="skew_consensus_v22_novix")
+    pdl.add_argument("--fills", default="alpaca_paper", choices=_choices)
+    pdl.add_argument("--submit", action="store_true",
+                     help="LIVE: fire entries + manage closes (default DRY-RUN review gate)")
+    pdl.add_argument("--no-refresh", action="store_true",
+                     help="skip the ORATS feed pull/rebuild (use the existing live panel)")
+    pdl.add_argument("--deploy-fraction", type=float, default=1.0,
+                     help="graduated rollout: fraction of the 0.5x deploy (e.g. 0.25 to start)")
+    pdl.add_argument("--no-gate", action="store_true", help="skip the live shortability gate")
+    pdl.add_argument("--limit", type=int, default=None, help="SAFETY: at most N orders (top by weight)")
+    pdl.add_argument("--max-notional", type=float, default=None, help="SAFETY: per-order max $ notional")
+    pdl.add_argument("--allow-stale", action="store_true", help="override the staleness guard (rarely needed live)")
+    pdl.add_argument("--dd-pause", type=float, default=DD_PAUSE)
+    pdl.add_argument("--dd-hard", type=float, default=DD_HARD)
+    pdl.add_argument("--dd-resume", type=float, default=DD_RESUME)
+
     args = ap.parse_args(argv)
     if args.cmd == "run":
         run(strategy=args.strategy, fills_mode=args.fills, submit=args.submit,
@@ -1022,6 +1161,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "clean-demos":
         clean_demos(strategy=args.strategy, fills_mode=args.fills,
                     symbols=tuple(s.strip() for s in args.symbols.split(",")), submit=args.submit)
+        return 0
+    if args.cmd == "daily":
+        daily(strategy=args.strategy, fills_mode=args.fills, submit=args.submit,
+              refresh_feed=not args.no_refresh, deploy_fraction=args.deploy_fraction,
+              gate_shorts=not args.no_gate, limit=args.limit, max_notional=args.max_notional,
+              allow_stale=args.allow_stale, dd_pause=args.dd_pause, dd_resume=args.dd_resume,
+              dd_hard=args.dd_hard)
         return 0
     return 1
 
