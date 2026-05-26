@@ -71,8 +71,10 @@ Round `skewDelta` to **2 dp**. Mid-rank tie-noise of +/-0.2 is accepted and must
 
 ### percentiles & freshness
 `putP / callP / ivP / rrP` are percentiles on a 0-100 scale. Gate thresholds are the
-spec's `hi/lo` (default **75 / 25**). Apply the spec's `freshness` window (default **3**):
-a feature value older than `freshness` days is stale — do not fire on it. Match the
+spec's `hi/lo` (default **75 / 25**). Apply the spec's `freshness` window (default **3**) as a
+trailing rolling-OR over each stage flag: `recent = flag.rolling(freshness, min_periods=1).max()`
+(today + the `freshness − 1` prior bars). **M1∧M2 co-fire = both `recent`-flags True on the SAME
+bar** — not merely each having fired somewhere in the window independently. Match the
 reference percentile method bit-for-bit; off-by-one ranking changes which trades fire.
 
 ### signal warm-up — 3 years / 756 trading days (PROJECT CONVENTION)
@@ -107,9 +109,15 @@ fwd_h[i] = clsPx[i + h] / clsPx[i] - 1
 - For delisted names, a window that runs past the last trade or the delisting date is
   `NaN` (you could not have held it). This is correct, not a gap to patch.
 
-Sanity anchor: on the clean panel, `fwd5 @ 2019-06-03 = 0.111192` for the reference
-build. If your `strategy()` doesn't reproduce a known anchor like this, stop and debug
-before going further.
+**Sanity anchor — anchors are panel-specific; always label which panel an anchor belongs to.**
+
+- **AV panel** (`signal_panel_clean.parquet`) **binding anchor:** 519,984 fires; verify
+  **AAPL 2015-08-05**. This is the anchor for Mode-A work on the AV panel.
+- **ORATS `clsPx` build anchor** (a DIFFERENT panel — do NOT use it for the AV panel):
+  historical only.
+
+If your `strategy()` doesn't reproduce the binding anchor for the panel you're on, stop and
+debug before going further.
 
 ### returns basis
 Default to **total-return** (`av_fwd_*_total`) as the headline — it matches the
@@ -137,6 +145,12 @@ percentile must be computable from data available on or before the entry date.
 - Use the **survivorship-free** universe (active + delisted). Building on survivors only
   flatters the edge — especially in stress years where delistings cluster.
 
+**Trust boundary (read vs recompute).** Percentiles `putP / callP / ivP / rrP` are **TRUSTED
+as-is** from the panel (already PIT in the parity-verified ORATS adapter). `sigma` / `skewDelta`
+are provider-supplied; **re-round defensively (3 dp / 2 dp)** — a no-op on this panel, but keep
+it. The `ivP` point-in-time local rebuild is the **look-ahead guard**, not a licence to recompute
+the others — do NOT re-derive `putP / callP / rrP` from scratch.
+
 ## Parity & validation discipline
 
 When a reference implementation exists (it usually does for a re-run), your generated
@@ -147,12 +161,17 @@ code must be checked against it — functional equivalence, not byte-identity.
 - **Report fire-level fidelity:** match the reference fires and report the rate (the
   consensus reference hits 98.9% fire, 100% side/stall/divergence fidelity; residuals are
   boundary float-noise and data gaps, not logic).
-- **Reproduce a known anchor** before trusting anything (the `fwd5` anchor above; an
-  AAPL self-check such as 2015-08-05 -> 98.8 / 78.97 / 1.6 / 5.6).
+- **Reproduce a known anchor** before trusting anything (the panel-specific binding anchor
+  above; an AAPL self-check such as 2015-08-05 -> 98.8 / 78.97 / 1.6 / 5.6).
 - **Check the verdict, not just the code.** If the strategy has a known Mode B result,
   the generated strategy's vs-random verdict must land on it (reference 21d: increment
   +18.3 bps, gross +106.5, z 9.12). A code diff that "looks fine" but moves the verdict
   is a real divergence.
+- **Validate by FUNCTIONAL EQUIVALENCE vs `compute_consensus`, not a CLI** — there is no
+  `python -m quant_validator.sandbox validate` (it does not exist). Use
+  `quant_validator.parity_gate.assert_fire_parity(gen_flags_fn, compute_consensus, panel)` and
+  the standing `tests/test_parity_gate.py`. Target: **0 side disagreements** on the parity
+  tickers (the runtime materialization gate enforces the same inside `backtest.run`).
 
 ## Where tail control belongs — NOT inside `strategy()`
 
@@ -169,21 +188,30 @@ volatility) and a short-trend filter (blocks losing momentum shorts, ~-1.54%). T
 for an entry filter: does it block *negative*-expectancy trades, or just *high-variance*
 ones? Only the former belongs here; the latter belongs in sizing.
 
+**The fires-frame is PRE-FILTER when the parity target is pre-filter.** Reproducing
+`compute_consensus` (which is pre-filter) means `earnings_blackout` / `short_trend` are
+**carried as flags (default `False`), NOT applied inside `strategy()`** — applying them here
+drops fires the reference keeps and **breaks parity**. The filters then act **downstream**
+(sizing / backtest), joining their earnings-date / trailing-return data there.
+
 ## Output schema (what stage 4+ expect)
 
 Return a tidy frame (one row per fire) with, at minimum:
 
-| column | meaning |
-|---|---|
-| `symbol` | instrument |
-| `date` | entry date |
-| `side` | `BULL` / `BEAR` |
-| `signal_sign` | `-1` (BULL/short) / `+1` (BEAR/long) |
-| `fwd_5` / `fwd_10` / `fwd_21` | forward returns (state the basis used) |
-| spec stage flags | e.g. `M1`, `M2`, `M3` (bool) |
+| column | dtype | meaning |
+|---|---|---|
+| `symbol` | `str` (from `ticker`) | instrument |
+| `date` | `datetime64[ns]` | entry (signal) date |
+| `side` | `str` ∈ {`BULL`, `BEAR`} | directional read |
+| `signal_sign` | `int64` ∈ {`-1`, `+1`} | `-1` BULL/short, `+1` BEAR/long |
+| `fwd_5` / `fwd_10` / `fwd_21` | `float` | forward returns; **NaN at the tail, never filled** |
+| `M1` / `M2` / `M3` / `m3_stall` / `m3_div` | `bool` | stage flags |
+| `raw_close` | `float` | as-traded close (the price screen runs on this) |
+| `av_matched` | `bool` | AV-bridge match flag |
+| `fwd_available_5` / `_10` / `_21` | `bool` | clean-forward availability |
 
-Keep `raw_close` available for the price screen. Carry `av_matched` / `fwd_available`
-so downstream stages can filter to clean rows.
+This is the concrete schema the Coder emits (state the forward-return basis used — headline =
+total return). Carry `av_matched` / `fwd_available_*` so downstream stages can filter to clean rows.
 
 ## Worked reference — skew-consensus
 
@@ -192,6 +220,12 @@ A spec realized correctly. Use it as the shape to imitate, not as values to hard
 - **M1 (corner):** `putP <= 25 & callP >= 75 -> BULL/SHORT`; mirror `putP >= 75 & callP <= 25 -> BEAR/LONG`.
 - **M2:** `ivP >= 75 & (rrP >= 75 OR rrP <= 25)`.
 - **M3:** sigma-stall OR skew-divergence.
+
+  **M3 sigma-stall (verbatim from `compute_consensus`):** `s0, s1, s2, s3 = sigma.shift(3),
+  sigma.shift(2), sigma.shift(1), sigma` (s0 oldest = t−3 … s3 = today). The stall is a
+  **shift-AND across all 4 bars** — `|sigma| >= sigma_thr` on each of `s0,s1,s2,s3` (signed to
+  the side) **and** plateauing `flat = (s3 - s0).abs() < 0.3`. A NaN anywhere in the window fails
+  the gate.
 
   **M3 skew-divergence direction is NOT free — it MUST match the M1 corner side.** Verbatim from
   the verified `compute_consensus` (`d0..d3 = skewDelta.shift(3..0)`; d0 oldest = t−3 … d3 = today):
@@ -208,6 +242,11 @@ A spec realized correctly. Use it as the shape to imitate, not as values to hard
   # INVARIANT: M3 divergence side == M1 corner side. BULL is always a SHORT fade,
   # BEAR always a LONG fade. Never confirm a BULL corner with a BEAR-shaped divergence.
   ```
+
+  > **FLOAT FORM IS LOAD-BEARING.** Write `d3 > d2 + 0.2` (NOT `(d3 - d2) > 0.2`) and a shift-AND
+  > across 4 bars (NOT `rolling(4).sum() == 4`). The forms are **algebraically equal but NOT
+  > bit-equal** (~332 ULP disagreements vs the reference). Parity here is byte-level.
+
 - **Params:** `freshness 3`, `hi/lo 75/25`, `sigma_thr 1.0`.
 - **Sign:** BULL -> `signal_sign -1` (profits if price falls).
 
@@ -236,6 +275,8 @@ The ORATS adapter took four debug rounds for exactly these — design against th
 8. Code quarantined; reference module untouched.
 9. A known anchor reproduced; if a reference verdict exists, it matches.
 10. No regime/VIX alpha gate baked in; tail control left to the Risk Agent.
+11. Fires-frame is PRE-FILTER when matching a pre-filter reference: `earnings_blackout` /
+    `short_trend` carried as flags (default `False`), applied downstream — never inside `strategy()`.
 
 ## Known gaps — codegen checklist
 
@@ -246,10 +287,17 @@ pipeline; tick every one or explain why it doesn't apply.
    (call-rich) corner with a BEAR-shaped divergence (presents as an inverted side-mapping). Now
    explicit and **locked to the M1 corner side** per the INVARIANT above (BULL = SHORT fade,
    BEAR = LONG fade; verbatim from `compute_consensus`).
-2. TODO — Stan to supply from the gap audit (do NOT invent).
-3. TODO — Stan to supply from the gap audit (do NOT invent).
-4. TODO — Stan to supply from the gap audit (do NOT invent).
-5. TODO — Stan to supply from the gap audit (do NOT invent).
-6. TODO — Stan to supply from the gap audit (do NOT invent).
-7. TODO — Stan to supply from the gap audit (do NOT invent).
-8. TODO — Stan to supply from the gap audit (do NOT invent).
+2. [FIXED] **Float form is load-bearing** — `d3 > d2 + 0.2` (not `(d3-d2) > 0.2`) and a 4-bar
+   shift-AND stall (not `rolling(4).sum()==4`); algebraically equal, NOT bit-equal (~332 ULP).
+3. [FIXED] **Freshness arithmetic** — `flag.rolling(freshness, min_periods=1).max()` (today +
+   `freshness − 1` prior bars); M1∧M2 co-fire = both `recent`-flags True on the SAME bar.
+4. [FIXED] **Trust boundary** — `putP/callP/ivP/rrP` trusted as-is; `sigma/skewDelta` re-rounded
+   defensively (3dp/2dp); the `ivP` PIT rebuild is the look-ahead guard, not a recompute of the rest.
+5. [FIXED] **Concrete fires-frame schema** — dtypes pinned (`symbol` str from `ticker`, `date`
+   datetime64[ns], `signal_sign` int64 ∈ {−1,+1}, flags bool, `fwd_*` float NaN-at-tail). See Output schema.
+6. [FIXED] **Fires-frame is PRE-FILTER** — `earnings_blackout`/`short_trend` carried as flags
+   (default `False`), applied downstream; applying them in `strategy()` breaks pre-filter parity.
+7. [FIXED] **Anchor was a BUG** — removed the ORATS `fwd5 @ 2019-06-03 = 0.111192` (wrong panel);
+   AV binding anchor = 519,984 fires / AAPL 2015-08-05; all anchors now panel-labelled.
+8. [FIXED] **Validation path** — functional equivalence via `parity_gate.assert_fire_parity` +
+   `tests/test_parity_gate.py`; the dead `quant_validator.sandbox validate` CLI does not exist.
