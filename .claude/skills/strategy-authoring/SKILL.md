@@ -192,6 +192,22 @@ A spec realized correctly. Use it as the shape to imitate, not as values to hard
 - **M1 (corner):** `putP <= 25 & callP >= 75 -> BULL/SHORT`; mirror `putP >= 75 & callP <= 25 -> BEAR/LONG`.
 - **M2:** `ivP >= 75 & (rrP >= 75 OR rrP <= 25)`.
 - **M3:** sigma-stall OR skew-divergence.
+
+  **M3 skew-divergence direction is NOT free — it MUST match the M1 corner side.** Verbatim from
+  the verified `compute_consensus` (`d0..d3 = skewDelta.shift(3..0)`; d0 oldest = t−3 … d3 = today):
+  - side `BULL` (call-rich corner -> SHORT fade):
+    `fading  = d0<0 and d1<0 and d2<0` (skew one-sided negative over the prior 3 bars) **and**
+    `turning = d3 > d2 + 0.2` (today turns up) -> **confirms SHORT**
+  - side `BEAR` (put-rich corner -> LONG fade):
+    `rising  = d0>0 and d1>0 and d2>0` **and**
+    `turning = d3 < d2 - 0.2` (today turns down) -> **confirms LONG**
+
+  (Reference: `quant_validator/consensus_signal.py` `compute_consensus` — `m3_div_bull` / `m3_div_bear`.)
+
+  ```
+  # INVARIANT: M3 divergence side == M1 corner side. BULL is always a SHORT fade,
+  # BEAR always a LONG fade. Never confirm a BULL corner with a BEAR-shaped divergence.
+  ```
 - **Params:** `freshness 3`, `hi/lo 75/25`, `sigma_thr 1.0`.
 - **Sign:** BULL -> `signal_sign -1` (profits if price falls).
 
@@ -220,3 +236,20 @@ The ORATS adapter took four debug rounds for exactly these — design against th
 8. Code quarantined; reference module untouched.
 9. A known anchor reproduced; if a reference verdict exists, it matches.
 10. No regime/VIX alpha gate baked in; tail control left to the Risk Agent.
+
+## Known gaps — codegen checklist
+
+Self-check these BEFORE emitting `strategy()`. Each is a real bug class that has bitten this
+pipeline; tick every one or explain why it doesn't apply.
+
+1. [FIXED] **M3 skew-divergence direction was underspecified** — the Coder could confirm a BULL
+   (call-rich) corner with a BEAR-shaped divergence (presents as an inverted side-mapping). Now
+   explicit and **locked to the M1 corner side** per the INVARIANT above (BULL = SHORT fade,
+   BEAR = LONG fade; verbatim from `compute_consensus`).
+2. TODO — Stan to supply from the gap audit (do NOT invent).
+3. TODO — Stan to supply from the gap audit (do NOT invent).
+4. TODO — Stan to supply from the gap audit (do NOT invent).
+5. TODO — Stan to supply from the gap audit (do NOT invent).
+6. TODO — Stan to supply from the gap audit (do NOT invent).
+7. TODO — Stan to supply from the gap audit (do NOT invent).
+8. TODO — Stan to supply from the gap audit (do NOT invent).
