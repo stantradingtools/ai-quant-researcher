@@ -3,7 +3,7 @@
   "version": 3,
   "run_mode": "A",
   "status": "validated + sized",
-  "updated_at": "2026-05-26T04:24:57+00:00",
+  "updated_at": "2026-05-26T04:44:15+00:00",
   "git_commit": "7533d7e",
   "stages": {
     "1_hypothesis": {
@@ -774,7 +774,7 @@
   "phases": {
     "4_paper": {
       "status": "deployed",
-      "updated_at": "2026-05-25T22:32:46+00:00",
+      "updated_at": "2026-05-26T04:44:15+00:00",
       "note": "Alpaca PAPER (alpaca_paper, tif=OPG): 3 targets, 3 accepted, 0/1 short fires skipped non-shortable; equity $1000000.0; shortability coverage 53.3% (14/30 short names non-shortable); ~21-bday scheduled exits; no-flip-without-close. OOS vs sized backtest: warming up (0 sessions). Phase-5 live = same path, paper=False + live keys.",
       "next_open_queue": [
         {
@@ -3729,5 +3729,13 @@
         "mean_hold_bd": 14.2
       }
     ]
+  },
+  "deployed_policy": {
+    "entry": "v22 consensus (M1 skew corner AND M2 IVxRR AND M3 stall/divergence; 75/25, freshness 3, sigma 1.0) - thesis-locked, unchanged",
+    "exit": "hard_stop_8 + boll_reversion_band + 21D backstop (6b OOS-validated, sign-aware) - replaces mechanical-21D-only",
+    "enforce_exits": "risk_only (default): hard_stop_8 + 21D backstop + kill-switch enforced automatically; boll_reversion profit-target surfaced as advisory (opt in via enforced)",
+    "benefit": "the validated exits mainly reduce DRAWDOWN / TAIL (esp. 2021-01 meme squeeze: hard_stop cuts the book-month ~+516bps), NOT extra return - mean per-trade edge is similar or slightly lower. Banked for risk, not alpha.",
+    "mutation_verdict": "Mutation Agent (#11): no validated improvement beyond v22+exits (near a local optimum) net of the cumulative MT penalty.",
+    "updated_at": "2026-05-26T04:40:18+00:00"
   }
 }

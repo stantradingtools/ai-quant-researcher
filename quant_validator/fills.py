@@ -454,6 +454,29 @@ CLEAN_PANEL = pathlib.Path("data/av/signal_panel_clean.parquet")
 MAX_SIGNAL_AGE_BDAYS = 2            # staleness: refuse to fire on a signal older than this (--allow-stale)
 DD_PAUSE, DD_RESUME, DD_HARD = 0.15, 0.07, 0.25   # kill-switch: pause / resume(hysteresis) / hard-flatten
 
+# CANONICAL DEPLOYED EXIT POLICY = v22 + the 6b OOS-validated exits (sign-aware), replacing the
+# old mechanical-21D-only. Rule dicts mirror exit_agent's builders exactly (no import needed) so
+# the LIVE manage loop and backtest_path evaluate byte-identical rules ("what you backtested trades").
+DEPLOYED_EXIT_POLICY = ({"type": "hard_stop", "pct": 0.08},
+                        {"type": "bollinger_reversion", "n": 20, "k": 2.0, "target": "band"},
+                        {"type": "time_backstop", "bdays": 21})
+# enforce_exits: which rules the manage loop ACTS on automatically (vs surfaces as advisory).
+#   advisory  — only the 21D backstop + kill-switch (always non-negotiable); everything else advisory
+#   risk_only — DEFAULT: + hard_stop_8 enforced (never make a stop-loss advisory); profit-target advisory
+#   enforced  — + boll_reversion_band profit-target enforced too (opt-in)
+ENFORCE_EXITS = os.environ.get("ENFORCE_EXITS", "risk_only")
+
+
+def _enforced_protective_rules(mode: str) -> tuple:
+    """The PROTECTIVE rules the manage loop closes on automatically (the 21D backstop stays the
+    separate scheduled-date check; the kill-switch is always on)."""
+    if mode == "advisory":
+        return ()
+    rules = [{"type": "hard_stop", "pct": 0.08}]
+    if mode == "enforced":
+        rules.append({"type": "bollinger_reversion", "n": 20, "k": 2.0, "target": "band"})
+    return tuple(rules)
+
 
 # ── persistent paper ledger (source of truth across runs; gitignored) ─────
 # One record per position keyed by the idempotent client_order_id. Survives restarts so
@@ -868,9 +891,88 @@ def _exit_one(fs: FillSource, led: dict, coid: str, positions: dict, open_by_coi
     actions.append({"symbol": sym, "action": "already_flat", "reason": reason, "submitted": submit})
 
 
+def _owned_position_bars(led: dict):
+    """Load adjusted OHLC + indicators for the OWNED positions' symbols (signal-date entry index),
+    via the SAME backtest_path loader the validation used. Returns (frame, bars) or (None, None)."""
+    from . import backtest_path as bt
+    from . import exit_agent as ea
+    open_pos = [(coid, r) for coid, r in led.get("positions", {}).items()
+                if r.get("status") in ("open", "pending")]
+    if not open_pos:
+        return None, None
+    fr = pd.DataFrame([{"coid": coid, "ticker": r["symbol"],
+                        "tradeDate": pd.Timestamp(r.get("entry_signal_date") or r.get("entry_fill_date")),
+                        "sign": int(r.get("signal_sign", 1)), "av_fwd_21_total": float("nan"),
+                        "side": r.get("side"), "raw_close": float("nan")} for coid, r in open_pos])
+    fr, bars = bt.prepare_bars(fr, ea._UNION)
+    return fr, bars
+
+
+def _protective_exits(led: dict, mode: str) -> list[tuple]:
+    """Per OWNED position, evaluate the ENFORCED protective rules by REUSING backtest_path._simulate
+    (parity by construction). Returns [(coid, reason)] for positions a protective rule has triggered
+    on/before today. The 21D backstop stays the separate scheduled-date check; kill-switch is always on."""
+    rules = _enforced_protective_rules(mode)
+    if not rules:
+        return []
+    from . import backtest_path as bt
+    fr, bars = _owned_position_bars(led)
+    if fr is None:
+        return []
+    eval_policy = rules + ({"type": "time_backstop", "bdays": 999},)   # far backstop: fallthrough != protective
+    today = _today().date()
+    out = []
+    for row in fr.itertuples():
+        rec = bars.get(row.av_symbol)
+        if rec is None:
+            continue
+        ei = rec["idx"].get(np.datetime64(pd.Timestamp(row.tradeDate)))
+        if ei is None:
+            continue
+        days_held = int(np.busday_count(pd.Timestamp(row.tradeDate).date(), today))
+        if days_held < 1:
+            continue
+        reason, _xi, _E, _xp = bt._simulate(rec, ei, int(row.sign), eval_policy, max_hold=days_held)
+        if reason != "time_backstop":            # a PROTECTIVE rule fired on/before today
+            out.append((row.coid, f"exit-policy {reason}"))
+    return out
+
+
+def exit_parity_check(strategy: str = "skew_consensus_v22_novix", sample: int = 500,
+                      start: str = "2018-01-01", mode: str = "enforced") -> dict:
+    """PARITY: the live manage-loop exit decision must equal backtest_path's, rule-for-rule. Load
+    bars once; for each sampled fire compare the LIVE eval (the enforced policy via _simulate) to
+    the BACKTEST walk (walk_loaded over the same policy). Agreement must be 100% (same _simulate)."""
+    import numpy as _np
+    from . import backtest_path as bt
+    from . import exit_agent as ea
+    policy = _enforced_protective_rules(mode) + ({"type": "time_backstop", "bdays": 21},)
+    fires = bt._load_fires(bt.CLEAN_PANEL, start)
+    fires = fires.sample(min(sample, len(fires)), random_state=0).reset_index(drop=True)
+    fires, bars = bt.prepare_bars(fires, ea._UNION)
+    bt_ret, bt_reason, bt_off = bt.walk_loaded(fires, bars, policy)        # the backtest path
+    agree = n = 0
+    for row in fires.itertuples():                                        # the live path (manage helper)
+        rec = bars.get(row.av_symbol)
+        if rec is None:
+            continue
+        ei = rec["idx"].get(_np.datetime64(pd.Timestamp(row.tradeDate)))
+        if ei is None:
+            continue
+        reason, xi, _E, _xp = bt._simulate(rec, ei, int(row.sign), policy, max_hold=21)
+        n += 1
+        if reason == bt_reason[row.Index] and (xi - ei) == bt_off[row.Index]:
+            agree += 1
+    rate = round(100.0 * agree / n, 2) if n else float("nan")
+    print(f"[parity-exits] mode={mode} | {agree}/{n} positions agree ({rate}%) "
+          f"-> {'BIT-IDENTICAL (live==backtest)' if agree == n else 'MISMATCH'}")
+    return {"mode": mode, "n": n, "agree": agree, "rate_pct": rate, "identical": agree == n}
+
+
 def manage(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "alpaca_paper",
            submit: bool = False, force_exit: str | None = None, simulate_dd: float | None = None,
-           dd_pause: float = DD_PAUSE, dd_resume: float = DD_RESUME, dd_hard: float = DD_HARD) -> dict:
+           dd_pause: float = DD_PAUSE, dd_resume: float = DD_RESUME, dd_hard: float = DD_HARD,
+           enforce_exits: str | None = None) -> dict:
     """Daily-runnable, idempotent exit + kill-switch runner. Reconciles vs Alpaca, closes owned
     positions whose 21-bday hold elapsed, and acts the drawdown kill-switch (pause/flatten) — all
     via API. Phase-5 live = same path (fills=alpaca_live). DRY-RUN unless --submit."""
@@ -900,7 +1002,12 @@ def manage(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "alpaca
         for coid, r in list(led.get("positions", {}).items()):
             if r.get("status") in ("open", "pending"):
                 _exit_one(fs, led, coid, positions, open_by_coid, submit, actions, "kill-switch HARD flatten")
-    for coid, r in list(led.get("positions", {}).items()):            # scheduled 21-bday exits
+    mode = enforce_exits or ENFORCE_EXITS                              # validated protective exits (6b)
+    for coid, reason in _protective_exits(led, mode):                 # hard_stop_8 [+ boll_reversion if enforced]
+        r = led.get("positions", {}).get(coid)
+        if r and r.get("status") in ("open", "pending"):
+            _exit_one(fs, led, coid, positions, open_by_coid, submit, actions, reason)
+    for coid, r in list(led.get("positions", {}).items()):            # scheduled 21-bday backstop
         if r.get("status") in ("open", "pending") and r.get("scheduled_exit_date") and r["scheduled_exit_date"] <= today:
             _exit_one(fs, led, coid, positions, open_by_coid, submit, actions, "scheduled 21bd exit")
     if force_exit:                                                     # manual close (testing the close path)
@@ -918,7 +1025,8 @@ def manage(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "alpaca
 
     owned = _owned_view(led)
     sim = " (SIMULATED)" if ks["simulated"] else ""
-    print(f"[manage] {strategy} {'SUBMIT' if submit else 'DRY-RUN'} | kill-switch {ks['state'].upper()}{sim} "
+    print(f"[manage] {strategy} {'SUBMIT' if submit else 'DRY-RUN'} | exits={mode} "
+          f"(deployed: hard_stop_8 + boll_reversion_band + 21D) | kill-switch {ks['state'].upper()}{sim} "
           f"DD {ks['drawdown_pct']}% (pause -{ks['dd_pause_pct']:.0f}% / hard -{ks['dd_hard_pct']:.0f}%) | "
           f"equity ${equity:,.0f} peak ${ks['peak_equity']:,.0f}")
     print(f"[manage] owned open: {len(owned)} | actions: {len(actions)}")
@@ -927,7 +1035,7 @@ def manage(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "alpaca
     if not actions:
         print("   (no exits due; nothing to flatten)")
     print(f"[manage] ledger {len(led.get('positions', {}))} record(s); report.json phases.4_paper updated + re-rendered")
-    return {"kill_switch": ks, "actions": actions, "owned": owned}
+    return {"kill_switch": ks, "actions": actions, "owned": owned, "enforce_exits": mode}
 
 
 # ── demo cleanup (the 3 OPG demo orders are NOT strategy positions) ───────
@@ -1035,7 +1143,7 @@ def daily(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "alpaca_
           submit: bool = False, refresh_feed: bool = True, deploy_fraction: float = 1.0,
           gate_shorts: bool = True, limit: int | None = None, max_notional: float | None = None,
           allow_stale: bool = False, dd_pause: float = DD_PAUSE, dd_resume: float = DD_RESUME,
-          dd_hard: float = DD_HARD) -> dict:
+          dd_hard: float = DD_HARD, enforce_exits: str | None = None) -> dict:
     """The daily production loop on the LIVE ORATS feed. See the block comment above."""
     eff_deploy = DEPLOY_MULT * deploy_fraction
     mode = "SUBMIT (LIVE)" if submit else "DRY-RUN (first-day review gate)"
@@ -1056,7 +1164,7 @@ def daily(strategy: str = "skew_consensus_v22_novix", fills_mode: str = "alpaca_
     #    (a paused kill-switch must block today's entries; submit_entries reads led state).
     print("[daily] --- manage (exits + kill-switch) ---")
     mres = manage(strategy=strategy, fills_mode=fills_mode, submit=submit,
-                  dd_pause=dd_pause, dd_resume=dd_resume, dd_hard=dd_hard)
+                  dd_pause=dd_pause, dd_resume=dd_resume, dd_hard=dd_hard, enforce_exits=enforce_exits)
 
     # 3) build the current-signal next-open queue from the LIVE panel (signal = latest session)
     print("[daily] --- queue (current-signal book from the live feed) ---")
@@ -1118,6 +1226,14 @@ def main(argv: list[str] | None = None) -> int:
     pm.add_argument("--dd-pause", type=float, default=DD_PAUSE)
     pm.add_argument("--dd-hard", type=float, default=DD_HARD)
     pm.add_argument("--dd-resume", type=float, default=DD_RESUME)
+    pm.add_argument("--enforce-exits", default=None, choices=["advisory", "risk_only", "enforced"],
+                    help="which validated exits the loop ACTS on (default env ENFORCE_EXITS=risk_only)")
+
+    pe = sub.add_parser("parity-exits", help="prove the live exit logic == backtest_path (sampled)")
+    pe.add_argument("--strategy", default="skew_consensus_v22_novix")
+    pe.add_argument("--sample", type=int, default=500)
+    pe.add_argument("--start", default="2018-01-01")
+    pe.add_argument("--mode", default="enforced", choices=["advisory", "risk_only", "enforced"])
 
     pc = sub.add_parser("clean-demos", help="cancel/close the 3 open demo orders (not strategy positions)")
     pc.add_argument("--strategy", default="skew_consensus_v22_novix")
@@ -1141,6 +1257,7 @@ def main(argv: list[str] | None = None) -> int:
     pdl.add_argument("--dd-pause", type=float, default=DD_PAUSE)
     pdl.add_argument("--dd-hard", type=float, default=DD_HARD)
     pdl.add_argument("--dd-resume", type=float, default=DD_RESUME)
+    pdl.add_argument("--enforce-exits", default=None, choices=["advisory", "risk_only", "enforced"])
 
     args = ap.parse_args(argv)
     if args.cmd == "run":
@@ -1156,7 +1273,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "manage":
         manage(strategy=args.strategy, fills_mode=args.fills, submit=args.submit,
                force_exit=args.force_exit, simulate_dd=args.simulate_dd,
-               dd_pause=args.dd_pause, dd_resume=args.dd_resume, dd_hard=args.dd_hard)
+               dd_pause=args.dd_pause, dd_resume=args.dd_resume, dd_hard=args.dd_hard,
+               enforce_exits=args.enforce_exits)
+        return 0
+    if args.cmd == "parity-exits":
+        exit_parity_check(args.strategy, sample=args.sample, start=args.start, mode=args.mode)
         return 0
     if args.cmd == "clean-demos":
         clean_demos(strategy=args.strategy, fills_mode=args.fills,
@@ -1167,7 +1288,7 @@ def main(argv: list[str] | None = None) -> int:
               refresh_feed=not args.no_refresh, deploy_fraction=args.deploy_fraction,
               gate_shorts=not args.no_gate, limit=args.limit, max_notional=args.max_notional,
               allow_stale=args.allow_stale, dd_pause=args.dd_pause, dd_resume=args.dd_resume,
-              dd_hard=args.dd_hard)
+              dd_hard=args.dd_hard, enforce_exits=args.enforce_exits)
         return 0
     return 1
 

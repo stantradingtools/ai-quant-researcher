@@ -374,6 +374,14 @@ def render_html(rep: dict) -> str:
         return sl.get("status", "not_started"), sl.get("updated_at", ""), sl.get("note", "")
 
     secs = []
+    dp = rep.get("deployed_policy")
+    if dp:
+        secs.append(_section("Deployed policy", "deployed", dp.get("updated_at", ""),
+            f'<p class="note"><b>Entry:</b> {_esc(dp.get("entry"))}</p>'
+            f'<p class="note"><b>Exit:</b> {_esc(dp.get("exit"))}</p>'
+            f'<p class="note"><b>enforce_exits:</b> {_esc(dp.get("enforce_exits"))}</p>'
+            f'<p class="note"><b>Benefit (honest):</b> {_esc(dp.get("benefit"))}</p>'
+            f'<p class="cap">{_esc(dp.get("mutation_verdict"))}</p>'))
     for key, title in _STAGE_TITLES.items():
         st, ts, note = slice_note(key)
         inner = f'<p class="note">{_esc(note)}</p>' if note else ""
