@@ -118,12 +118,14 @@ STEP 4 — Code agent (Mode A only)
 Invoke code subagent. Reads refined.json, writes code/signal.py
 and step_summaries/04_code.md.
 
-Run sandbox via Bash:
-  python -m quant_validator.sandbox validate \
-    theses/<thesis_id>/code/signal.py
+Validate by FUNCTIONAL EQUIVALENCE vs compute_consensus -- NOT a CLI (no sandbox
+command exists). Use quant_validator.parity_gate.assert_fire_parity(gen_flags_fn,
+compute_consensus, panel) and the standing tests/test_parity_gate.py; the runtime
+materialization gate in backtest.run enforces the same. Target: 0 side disagreements
+on the parity tickers.
 
-CHECKPOINT: if sandbox fails, ask: "Sandbox rejected the generated code.
-Options: retry with critic hint, manual edit, or abort?"
+CHECKPOINT: if the parity check fails (side disagreements > 0), ask: "Parity check
+rejected the generated code. Options: retry with critic hint, manual edit, or abort?"
 Default on --no-pause: abort.
 
 ═══════════════════════════════════════════════════════════════

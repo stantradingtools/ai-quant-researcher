@@ -97,7 +97,11 @@ PROCESS:
 1. Read theses/<thesis_id>/refined.json.
 2. Decide signature (A or B or C) based on market_type and mode.
 3. Write the function to theses/<thesis_id>/code/signal.py.
-4. Run sandbox validation: python -m quant_validator.sandbox validate <path>
+4. Validate by FUNCTIONAL EQUIVALENCE vs compute_consensus -- NOT a CLI (no sandbox
+   command exists). Call quant_validator.parity_gate.assert_fire_parity(gen_flags_fn,
+   compute_consensus, panel) and run the standing tests/test_parity_gate.py; the runtime
+   materialization gate in quant_validator.backtest.run enforces the same. Target: 0 side
+   disagreements on the parity tickers.
 5. Write a one-paragraph human summary to
    theses/<thesis_id>/step_summaries/04_code.md describing:
    - The signal mechanism in plain language
