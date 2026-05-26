@@ -133,11 +133,10 @@ STEP 5 — Backtest (Mode A) or verify (Mode B)
 
 MODE_A: Run via Bash:
   python -m quant_validator.backtest run \
-    --thesis_id <thesis_id> --engine vectorized
-  python -m quant_validator.backtest run \
-    --thesis_id <thesis_id> --engine event_driven
-Confirm vectorized and event-driven agree within cost tolerance
-(default 5% of returns). If they disagree, warn but proceed.
+    --thesis_id <thesis_id>
+The fires-frame adapter is the only engine (--engine defaults to "fires" and is the sole
+value; there is no vectorized/event-driven split). Nothing to cross-check here -- the single
+run writes results/{vs_random.json, returns.csv, positions.csv, net_return_panel.csv}.
 
 MODE_B: Confirm these files exist in theses/<thesis_id>/results/:
   positions.csv, returns.csv, equity_curve.csv
