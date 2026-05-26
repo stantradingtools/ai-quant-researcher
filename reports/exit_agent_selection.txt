@@ -1,0 +1,27 @@
+============================================================================================
+EXIT AGENT (#12) — OOS WALK-FORWARD RULE SELECTION vs the 21D time backstop
+============================================================================================
+sample 20,000/452,981 fires | 5 rolling time folds | from 2014-01-01 | cost 20bps | 12 candidates tried (Mutation DSR count) | 235.0s
+baseline (21D backstop): pooled Sharpe 0.879 maxDD -0.2395 mean 100.7bps | 2021-01 -608.5bps
+
+  candidate               | surv|foldsβSharpe| foldsↆDD| Sharpe|   maxDD| mean bps| 2021-01 vs base
+  ------------------------------------------------------------------------------------------------
+  hard_stop_8             |  YES|         3/5|      4/5|  1.075| -0.0997|     58.9|          +516.2
+  boll_reversion_band     |  YES|         2/5|      5/5|  0.867|  -0.219|     96.7|           +63.1
+  tail_control            |   no|         3/5|      5/5|  1.059| -0.0706|     42.8|          +675.3
+  reversion_plus_stop     |   no|         2/5|      5/5|  0.619| -0.0595|     14.3|          +534.6
+  full_combo              |   no|         2/5|      5/5|  0.471| -0.0748|     10.1|          +639.2
+  squeeze                 |   no|         2/5|      1/5|  0.829| -0.1539|     96.1|          +543.3
+  boll_reversion_mean     |   no|         1/5|      5/5|   0.69| -0.1433|     44.0|          +185.6
+  trailing_10             |   no|         1/5|      5/5|  0.567| -0.0801|     23.1|          +605.6
+  vol_spike_yz5           |   no|         1/5|      3/5|  0.731| -0.1214|     32.7|          +249.6
+  profit_target_15        |   no|         1/5|      2/5|   0.45| -0.2503|     51.3|            -8.5
+  vol_spike_atm_iv        |   no|         0/5|      5/5| -0.528| -0.1448|    -13.7|          +502.8
+
+VALIDATED (beat the backstop on a majority of folds): ['hard_stop_8', 'boll_reversion_band']
+
+READOUT:
+  - 'survives' = beats baseline Sharpe OR cuts maxDD on a majority of folds AND keeps >=50% of edge.
+  - 2021-01 vs base (bps): tail-control value on the meme-squeeze month (+ = cut the loss).
+  - Every candidate above is logged; n_candidates_tried feeds the Mutation Agent's DSR penalty.
+  - 21D backstop is always present and non-negotiable; no live rule bypasses this selection.

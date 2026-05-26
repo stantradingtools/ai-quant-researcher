@@ -139,9 +139,10 @@ def _load_symbol_bars(av_symbols: set[str], policy, signal_join: pd.DataFrame | 
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values(["symbol", "date"])
 
-    need_boll = _needs(policy, "bollinger_mean", "bollinger_band")
-    boll_n = next((int(r.get("n", 20)) for r in policy if r["type"] in ("bollinger_mean", "bollinger_band")), 20)
-    boll_k = next((float(r.get("k", 2.0)) for r in policy if r["type"] in ("bollinger_mean", "bollinger_band")), 2.0)
+    _BOLL = ("bollinger_mean", "bollinger_band", "bollinger_reversion")
+    need_boll = _needs(policy, *_BOLL)
+    boll_n = next((int(r.get("n", 20)) for r in policy if r["type"] in _BOLL), 20)
+    boll_k = next((float(r.get("k", 2.0)) for r in policy if r["type"] in _BOLL), 2.0)
     need_yz = any(r["type"] == "vol_spike" and r.get("measure", "yz5") == "yz5" for r in policy)
     yz_n = next((int(r.get("n", 5)) for r in policy if r["type"] == "vol_spike" and r.get("measure", "yz5") == "yz5"), 5)
 
@@ -238,6 +239,21 @@ def _simulate(rec: dict, entry_idx: int, sign: int, policy, max_hold: int):
                     return "bollinger_band", t, E, up
                 if sign < 0 and np.isfinite(lo) and l[t] <= lo:
                     return "bollinger_band", t, E, lo
+            elif typ == "bollinger_reversion":
+                # ENTRY-CONTEXT-AWARE fade take-profit (the 6a fix): arm ONLY when the position
+                # is entered on the EXTENDED side, so reverting to the target is in the PROFIT
+                # direction. short (BULL fade): entered above its mean -> profit as price reverts
+                # DOWN to the mean (or lower band); long (BEAR fade): entered below -> reverts UP.
+                mid_e = rec["boll_mid"][entry_idx]
+                if np.isfinite(mid_e):
+                    if rule.get("target", "mean") == "band":
+                        tgt_s, tgt_l = rec["boll_lo"][t], rec["boll_up"][t]
+                    else:
+                        tgt_s = tgt_l = rec["boll_mid"][t]
+                    if sign < 0 and E >= mid_e and np.isfinite(tgt_s) and l[t] <= tgt_s:
+                        return "bollinger_reversion", t, E, tgt_s
+                    if sign > 0 and E <= mid_e and np.isfinite(tgt_l) and h[t] >= tgt_l:
+                        return "bollinger_reversion", t, E, tgt_l
             elif typ == "vol_spike":
                 meas = rule.get("measure", "yz5")
                 arr = rec.get("yz") if meas == "yz5" else rec.get("atm_iv")
@@ -333,8 +349,10 @@ def run(thesis_id: str, policy=DEFAULT_POLICY, start: str | None = None,
     return summary
 
 
-def _bar_walk(fires: pd.DataFrame, policy, entry_mode: str):
-    """Group fires by av_symbol, precompute indicators once, simulate each fire's path."""
+def prepare_bars(fires: pd.DataFrame, policy):
+    """Map fires -> av_symbol and precompute per-symbol adjusted OHLC + indicators ONCE (for the
+    union of what `policy` needs). Returns (fires+av_symbol, reset 0..n-1, bars dict). The Exit
+    Agent calls this once with a UNION policy, then walks many candidates over the same `bars`."""
     smap = _load_symbol_map()
     fires = fires.copy()
     fires["av_symbol"] = fires["ticker"].astype(str).str.upper().map(lambda t: (smap.get(t) or ("", ""))[0])
@@ -345,47 +363,48 @@ def _bar_walk(fires: pd.DataFrame, policy, entry_mode: str):
         sj = pd.read_parquet(CLEAN_PANEL, columns=["ticker", "tradeDate", "atmIV", "skew"])
         sj["av_symbol"] = sj["ticker"].astype(str).str.upper().map(lambda t: (smap.get(t) or ("", ""))[0])
         signal_join = sj[sj["av_symbol"].isin(av_syms)]
-    bars = _load_symbol_bars(av_syms, policy, signal_join)
-    max_hold = _max_hold(policy)
+    return fires, _load_symbol_bars(av_syms, policy, signal_join)
 
+
+def walk_loaded(fires: pd.DataFrame, bars: dict, policy, entry_mode: str = "signal_close"):
+    """Walk every fire's path over PRE-LOADED bars (fires has av_symbol + a 0..n-1 index).
+    Returns (ret, reason, offset) arrays aligned to fires.index. Reusable across candidate
+    policies without re-reading OHLC (the optimisation-loop hot path)."""
+    max_hold = _max_hold(policy)
     rets = np.full(len(fires), np.nan)
     reasons = np.empty(len(fires), dtype=object)
     offsets = np.zeros(len(fires), dtype=int)
-    walked = 0
     for sym, g in fires.groupby("av_symbol", sort=False):
         rec = bars.get(sym)
         if rec is None:
             continue
         idxmap = rec["idx"]
         for row in g.itertuples():
-            d = np.datetime64(pd.Timestamp(row.tradeDate))
-            ei = idxmap.get(d)
-            if ei is None:
-                # signal date not on the AV grid (rare; would be NaN fwd -> already filtered)
-                rets[row.Index] = row.av_fwd_21_total
-                reasons[row.Index] = "time_backstop"
-                offsets[row.Index] = max_hold
+            ei = idxmap.get(np.datetime64(pd.Timestamp(row.tradeDate)))
+            if ei is None:                                # signal date off the AV grid (rare)
+                rets[row.Index], reasons[row.Index], offsets[row.Index] = (
+                    row.av_fwd_21_total, "time_backstop", max_hold)
                 continue
             if entry_mode == "next_open" and ei + 1 < len(rec["c"]):
                 E = rec["o"][ei + 1]
                 reason, xi, _, xp = _simulate(rec, ei + 1, row.sign, policy, max_hold)
-                rets[row.Index] = xp / E - 1.0 if E > 0 else np.nan
-                reasons[row.Index] = reason
-                offsets[row.Index] = xi - ei
             else:
                 reason, xi, E, xp = _simulate(rec, ei, row.sign, policy, max_hold)
-                rets[row.Index] = xp / E - 1.0 if E > 0 else np.nan
-                reasons[row.Index] = reason
-                offsets[row.Index] = xi - ei
-            walked += 1
-    fires["ret"] = rets
-    fires["exit_reason"] = reasons
-    fires["exit_offset"] = offsets
+            rets[row.Index] = xp / E - 1.0 if E > 0 else np.nan
+            reasons[row.Index], offsets[row.Index] = reason, xi - ei
+    return rets, reasons, offsets
+
+
+def _bar_walk(fires: pd.DataFrame, policy, entry_mode: str):
+    """Full path walk for one policy: prepare bars (load + precompute), then walk."""
+    fires, bars = prepare_bars(fires, policy)
+    rets, reasons, offsets = walk_loaded(fires, bars, policy, entry_mode)
+    fires["ret"], fires["exit_reason"], fires["exit_offset"] = rets, reasons, offsets
     # any fire whose path couldn't be simulated falls back to close-to-close (parity-safe)
     miss = fires["ret"].isna()
     fires.loc[miss, "ret"] = fires.loc[miss, "av_fwd_21_total"]
     fires.loc[miss, "exit_reason"] = fires.loc[miss, "exit_reason"].fillna("time_backstop")
-    return fires, walked
+    return fires, int((~miss).sum())
 
 
 def _write_artifacts(thesis_id: str, fires: pd.DataFrame, daily: pd.Series,

@@ -254,6 +254,35 @@ def _owned_block(p4: dict) -> str:
     return out
 
 
+def _exit_options_block(p4: dict) -> str:
+    """Phase-4 'Exit options' (Exit Agent #12) — 2-3 ranked exits per open position."""
+    eo = p4.get("exit_options")
+    if not eo or not eo.get("positions"):
+        return ""
+    tag = ("LIVE" if eo.get("live") else "ILLUSTRATIVE (book flat — top live-queue names)")
+    vr = ", ".join(eo.get("validated_rules") or []) or "none yet"
+    out = (f'<p class="note" style="margin-top:14px"><b>Exit options</b> (Exit Agent #12, {tag}) — '
+           f'as of <b>{_esc(eo.get("as_of"))}</b>; OOS-validated rules: <b>{_esc(vr)}</b>. '
+           f'Advisory; the 21D backstop is always present.</p>')
+    head = ("<thead><tr><th>symbol</th><th>side</th><th>held</th><th>rank</th><th>rule</th>"
+            "<th>trigger</th><th>rationale</th><th>proj %</th></tr></thead>")
+    rows = ""
+    _urg = {"act_now": "red", "target": "ok", "backstop": "gray", "watch": "amber"}
+    for pos in eo["positions"]:
+        opts = pos.get("options", [])
+        for i, o in enumerate(opts):
+            sym = _esc(pos["symbol"]) if i == 0 else ""
+            side = _esc(pos.get("side")) if i == 0 else ""
+            held = f'{pos.get("days_held")}d' if i == 0 else ""
+            proj = o.get("projected_return_pct")
+            projs = f'{proj:+.2f}%' if isinstance(proj, (int, float)) else "—"
+            chipcls = _urg.get(o.get("urgency"), "gray")
+            rows += (f'<tr><td>{sym}</td><td>{side}</td><td>{held}</td>'
+                     f'<td>{i+1}</td><td><span class="chip {chipcls}">{_esc(o.get("rule"))}</span></td>'
+                     f'<td>{_esc(o.get("trigger"))}</td><td>{_esc(o.get("rationale"))}</td><td>{projs}</td></tr>')
+    return out + f"<table>{head}<tbody>{rows}</tbody></table>"
+
+
 def _queue_block(p4: dict) -> str:
     """Phase-4 'Next-open trade queue' — one row per order, sized + shortability-gated."""
     q = p4.get("next_open_queue")
@@ -354,6 +383,7 @@ def render_html(rep: dict) -> str:
         if k == "4_paper":
             ph_inner += _live_orats_block(pl)
             ph_inner += _owned_block(pl)
+            ph_inner += _exit_options_block(pl)
             ph_inner += _queue_block(pl)
     ph_status = ph.get("4_paper", {}).get("status", "not_started")
     secs.append(_section("Phases", ph_status, ph.get("4_paper", {}).get("updated_at", ""), ph_inner))

@@ -3478,6 +3478,114 @@
         "source": "live daily full-universe ORATS pull (adapters.orats live)",
         "updated_at": "2026-05-25T15:47:31+00:00",
         "note": "Live ORATS feed wired: backfilled to 2026-05-22, signal recomputed on the trailing 756-bday window -> 215 fires (110 long / 105 short) on 2026-05-22. Feed verified; submission NOT yet wired to the live panel (next step)."
+      },
+      "exit_options": {
+        "as_of": "2026-05-26",
+        "live": false,
+        "illustrative": true,
+        "validated_rules": [
+          "hard_stop_8",
+          "boll_reversion_band"
+        ],
+        "positions": [
+          {
+            "symbol": "A",
+            "side": "BULL",
+            "status": "illustrative",
+            "days_held": 2,
+            "options": [
+              {
+                "rule": "bollinger_reversion",
+                "trigger": "price reverts to mean ~$114.09",
+                "rationale": "fade take-profit: short reverting down toward its 20d mean",
+                "projected_return_pct": 0.76,
+                "urgency": "target"
+              },
+              {
+                "rule": "time_backstop",
+                "trigger": "21D hard exit on (hypothetical +21bd)",
+                "rationale": "held 2/21d; close regardless on the backstop date",
+                "projected_return_pct": null,
+                "urgency": "backstop"
+              }
+            ]
+          },
+          {
+            "symbol": "AIVC",
+            "side": "BEAR",
+            "status": "illustrative",
+            "days_held": 2,
+            "options": [
+              {
+                "rule": "time_backstop",
+                "trigger": "21D hard exit on (hypothetical +21bd)",
+                "rationale": "held 2/21d; close regardless on the backstop date",
+                "projected_return_pct": null,
+                "urgency": "backstop"
+              }
+            ]
+          },
+          {
+            "symbol": "BUG",
+            "side": "BULL",
+            "status": "illustrative",
+            "days_held": 2,
+            "options": [
+              {
+                "rule": "bollinger_reversion",
+                "trigger": "price reverts to mean ~$29.94",
+                "rationale": "fade take-profit: short reverting down toward its 20d mean",
+                "projected_return_pct": 14.73,
+                "urgency": "target"
+              },
+              {
+                "rule": "time_backstop",
+                "trigger": "21D hard exit on (hypothetical +21bd)",
+                "rationale": "held 2/21d; close regardless on the backstop date",
+                "projected_return_pct": null,
+                "urgency": "backstop"
+              }
+            ]
+          },
+          {
+            "symbol": "BIPC",
+            "side": "BULL",
+            "status": "illustrative",
+            "days_held": 2,
+            "options": [
+              {
+                "rule": "bollinger_reversion",
+                "trigger": "price reverts to mean ~$39.56",
+                "rationale": "fade take-profit: short reverting down toward its 20d mean",
+                "projected_return_pct": 6.55,
+                "urgency": "target"
+              },
+              {
+                "rule": "time_backstop",
+                "trigger": "21D hard exit on (hypothetical +21bd)",
+                "rationale": "held 2/21d; close regardless on the backstop date",
+                "projected_return_pct": null,
+                "urgency": "backstop"
+              }
+            ]
+          },
+          {
+            "symbol": "CBZ",
+            "side": "BEAR",
+            "status": "illustrative",
+            "days_held": 2,
+            "options": [
+              {
+                "rule": "time_backstop",
+                "trigger": "21D hard exit on (hypothetical +21bd)",
+                "rationale": "held 2/21d; close regardless on the backstop date",
+                "projected_return_pct": null,
+                "urgency": "backstop"
+              }
+            ]
+          }
+        ],
+        "updated_at": "2026-05-26T00:48:57+00:00"
       }
     },
     "5_live": {

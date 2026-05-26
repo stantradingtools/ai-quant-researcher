@@ -1,0 +1,266 @@
+{
+  "thesis_id": "skew_consensus_v22_novix",
+  "n_fires_sampled": 20000,
+  "n_fires_total": 452981,
+  "n_folds": 5,
+  "fold_spans": [
+    [
+      0,
+      "2014-01-02",
+      "2016-11-04"
+    ],
+    [
+      1,
+      "2016-11-04",
+      "2019-08-09"
+    ],
+    [
+      2,
+      "2019-08-09",
+      "2022-03-09"
+    ],
+    [
+      3,
+      "2022-03-09",
+      "2024-09-11"
+    ],
+    [
+      4,
+      "2024-09-11",
+      "2026-04-23"
+    ]
+  ],
+  "start": "2014-01-01",
+  "cost_bps": 20.0,
+  "n_candidates_tried": 12,
+  "candidates_tried": [
+    "baseline_21d_backstop",
+    "hard_stop_8",
+    "trailing_10",
+    "profit_target_15",
+    "boll_reversion_mean",
+    "boll_reversion_band",
+    "vol_spike_yz5",
+    "vol_spike_atm_iv",
+    "squeeze",
+    "tail_control",
+    "reversion_plus_stop",
+    "full_combo"
+  ],
+  "baseline": {
+    "pooled": {
+      "n": 20000,
+      "mean_bps": 100.67335792711418,
+      "sharpe": 0.879,
+      "maxdd": -0.2395,
+      "n_months": 148
+    },
+    "jan2021_bps": -608.5
+  },
+  "ranked": [
+    {
+      "name": "hard_stop_8",
+      "survives": true,
+      "folds_beat_sharpe": 3,
+      "folds_cut_dd": 4,
+      "n_folds": 5,
+      "edge_kept": true,
+      "pooled_sharpe": 1.075,
+      "pooled_maxdd": -0.0997,
+      "pooled_mean_bps": 58.9,
+      "jan2021_bps": -92.3,
+      "jan2021_vs_base_bps": 516.2
+    },
+    {
+      "name": "boll_reversion_band",
+      "survives": true,
+      "folds_beat_sharpe": 2,
+      "folds_cut_dd": 5,
+      "n_folds": 5,
+      "edge_kept": true,
+      "pooled_sharpe": 0.867,
+      "pooled_maxdd": -0.219,
+      "pooled_mean_bps": 96.7,
+      "jan2021_bps": -545.4,
+      "jan2021_vs_base_bps": 63.1
+    },
+    {
+      "name": "tail_control",
+      "survives": false,
+      "folds_beat_sharpe": 3,
+      "folds_cut_dd": 5,
+      "n_folds": 5,
+      "edge_kept": false,
+      "pooled_sharpe": 1.059,
+      "pooled_maxdd": -0.0706,
+      "pooled_mean_bps": 42.8,
+      "jan2021_bps": 66.8,
+      "jan2021_vs_base_bps": 675.3
+    },
+    {
+      "name": "reversion_plus_stop",
+      "survives": false,
+      "folds_beat_sharpe": 2,
+      "folds_cut_dd": 5,
+      "n_folds": 5,
+      "edge_kept": false,
+      "pooled_sharpe": 0.619,
+      "pooled_maxdd": -0.0595,
+      "pooled_mean_bps": 14.3,
+      "jan2021_bps": -73.9,
+      "jan2021_vs_base_bps": 534.6
+    },
+    {
+      "name": "full_combo",
+      "survives": false,
+      "folds_beat_sharpe": 2,
+      "folds_cut_dd": 5,
+      "n_folds": 5,
+      "edge_kept": false,
+      "pooled_sharpe": 0.471,
+      "pooled_maxdd": -0.0748,
+      "pooled_mean_bps": 10.1,
+      "jan2021_bps": 30.7,
+      "jan2021_vs_base_bps": 639.2
+    },
+    {
+      "name": "squeeze",
+      "survives": false,
+      "folds_beat_sharpe": 2,
+      "folds_cut_dd": 1,
+      "n_folds": 5,
+      "edge_kept": true,
+      "pooled_sharpe": 0.829,
+      "pooled_maxdd": -0.1539,
+      "pooled_mean_bps": 96.1,
+      "jan2021_bps": -65.2,
+      "jan2021_vs_base_bps": 543.3
+    },
+    {
+      "name": "boll_reversion_mean",
+      "survives": false,
+      "folds_beat_sharpe": 1,
+      "folds_cut_dd": 5,
+      "n_folds": 5,
+      "edge_kept": false,
+      "pooled_sharpe": 0.69,
+      "pooled_maxdd": -0.1433,
+      "pooled_mean_bps": 44.0,
+      "jan2021_bps": -422.9,
+      "jan2021_vs_base_bps": 185.6
+    },
+    {
+      "name": "trailing_10",
+      "survives": false,
+      "folds_beat_sharpe": 1,
+      "folds_cut_dd": 5,
+      "n_folds": 5,
+      "edge_kept": false,
+      "pooled_sharpe": 0.567,
+      "pooled_maxdd": -0.0801,
+      "pooled_mean_bps": 23.1,
+      "jan2021_bps": -2.9,
+      "jan2021_vs_base_bps": 605.6
+    },
+    {
+      "name": "vol_spike_yz5",
+      "survives": false,
+      "folds_beat_sharpe": 1,
+      "folds_cut_dd": 3,
+      "n_folds": 5,
+      "edge_kept": false,
+      "pooled_sharpe": 0.731,
+      "pooled_maxdd": -0.1214,
+      "pooled_mean_bps": 32.7,
+      "jan2021_bps": -358.9,
+      "jan2021_vs_base_bps": 249.6
+    },
+    {
+      "name": "profit_target_15",
+      "survives": false,
+      "folds_beat_sharpe": 1,
+      "folds_cut_dd": 2,
+      "n_folds": 5,
+      "edge_kept": true,
+      "pooled_sharpe": 0.45,
+      "pooled_maxdd": -0.2503,
+      "pooled_mean_bps": 51.3,
+      "jan2021_bps": -617.0,
+      "jan2021_vs_base_bps": -8.5
+    },
+    {
+      "name": "vol_spike_atm_iv",
+      "survives": false,
+      "folds_beat_sharpe": 0,
+      "folds_cut_dd": 5,
+      "n_folds": 5,
+      "edge_kept": false,
+      "pooled_sharpe": -0.528,
+      "pooled_maxdd": -0.1448,
+      "pooled_mean_bps": -13.7,
+      "jan2021_bps": -105.7,
+      "jan2021_vs_base_bps": 502.8
+    }
+  ],
+  "validated_rules": [
+    "hard_stop_8",
+    "boll_reversion_band"
+  ],
+  "exit_mix": {
+    "baseline_21d_backstop": {
+      "time_backstop": 20000
+    },
+    "hard_stop_8": {
+      "time_backstop": 11650,
+      "hard_stop": 8350
+    },
+    "trailing_10": {
+      "time_backstop": 8032,
+      "trailing_stop": 11968
+    },
+    "profit_target_15": {
+      "time_backstop": 15550,
+      "profit_target": 4450
+    },
+    "boll_reversion_mean": {
+      "bollinger_reversion": 11519,
+      "time_backstop": 8481
+    },
+    "boll_reversion_band": {
+      "bollinger_reversion": 6154,
+      "time_backstop": 13846
+    },
+    "vol_spike_yz5": {
+      "time_backstop": 13651,
+      "vol_spike_yz5": 6349
+    },
+    "vol_spike_atm_iv": {
+      "vol_spike_atm_iv": 19997,
+      "time_backstop": 3
+    },
+    "squeeze": {
+      "squeeze": 2462,
+      "time_backstop": 17538
+    },
+    "tail_control": {
+      "squeeze": 1502,
+      "hard_stop": 6236,
+      "time_backstop": 8854,
+      "vol_spike_yz5": 3408
+    },
+    "reversion_plus_stop": {
+      "bollinger_reversion": 9035,
+      "hard_stop": 6298,
+      "time_backstop": 4667
+    },
+    "full_combo": {
+      "squeeze": 1238,
+      "hard_stop": 4713,
+      "time_backstop": 3581,
+      "vol_spike_yz5": 2585,
+      "bollinger_reversion": 7883
+    }
+  },
+  "runtime_s": 235.0,
+  "updated_at": "2026-05-26T00:54:08+00:00"
+}
