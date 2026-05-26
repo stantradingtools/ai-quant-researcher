@@ -32,6 +32,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from .parity_gate import (FEATURE_COLS, PARITY_TICKERS, ParityError,
+                          assert_materialization_parity)
 from .signal_vs_random import (HORIZONS, annotate_clean, clean_run_columns, run_test,
                                warmup_start_date)
 from .sizing import build_position_panel
@@ -40,8 +42,32 @@ CLEAN_PANEL = Path("data/av/signal_panel_clean.parquet")
 ANN = 252
 
 
+def _load_spec(thesis_id: str) -> dict | None:
+    """thesis_id -> theses/<id>/refined.json (the spec). None if absent — a novel thesis with
+    no declared reference has nothing to parity-check against, so the gate skips."""
+    p = Path(f"theses/{thesis_id}/refined.json")
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _resolve_reference_fn(spec: dict | None):
+    """Map a spec's declared reference -> a per-symbol side-recompute callable. Only
+    'compute_consensus' is wired (the verified reference); anything else / absent -> None (skip)."""
+    if not spec:
+        return None
+    ref = spec.get("reference") or (spec.get("spec") or {}).get("reference")
+    if ref == "compute_consensus":
+        from .consensus_signal import ConsensusOpts, compute_consensus
+        return lambda sub: compute_consensus(sub.sort_values("tradeDate"), ConsensusOpts())
+    return None
+
+
 def run(thesis_id: str, panel_path: Path = CLEAN_PANEL, start: str | None = None,
-        cost_bps: float = 20.0, n_boot: int = 2000) -> dict:
+        cost_bps: float = 20.0, n_boot: int = 2000, spec: dict | None = None) -> dict:
     res_dir = Path(f"theses/{thesis_id}/results")
     res_dir.mkdir(parents=True, exist_ok=True)
     panel = pd.read_parquet(panel_path, columns=clean_run_columns())
@@ -53,6 +79,34 @@ def run(thesis_id: str, panel_path: Path = CLEAN_PANEL, start: str | None = None
     #    the RAW consensus (== the generated strategy's fires, byte-identical pre-screen),
     #    so run_test applies the eligibility screen exactly once.
     ann = annotate_clean(panel, "total", "full")
+
+    # ── STANDING FIRE-PARITY GATE (materialization): the panel's STORED side — exactly what
+    #    run_test scores — must reproduce the declared reference bit-for-bit, or we REFUSE to
+    #    score (first_failure=fire_parity). Only enforced when the spec declares a reference;
+    #    a novel thesis with none skips cleanly (keeps Mode A general). Reads the 6 feature
+    #    columns for a fixed ticker set off the SAME warmed panel (no re-fetch, no look-ahead).
+    spec = spec if spec is not None else _load_spec(thesis_id)
+    ref_fn = _resolve_reference_fn(spec)
+    if ref_fn is not None:
+        feat = pd.read_parquet(panel_path, columns=FEATURE_COLS + ["ticker", "tradeDate"])
+        feat = feat[feat["ticker"].isin(PARITY_TICKERS)]
+        try:
+            rep = assert_materialization_parity(panel, ref_fn, feat)
+        except ParityError as e:
+            (res_dir / "vs_random.json").write_text(json.dumps({
+                "status": "fail", "source": "fires_adapter", "overall_verdict": "fail",
+                "first_failure": "fire_parity", "method": "materialization parity (parity_gate)",
+                "error": str(e)[:4000],
+                "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")},
+                indent=2), encoding="utf-8")
+            print(f"[backtest] {thesis_id}: FIRE-PARITY GATE FAILED -> scoring REFUSED "
+                  f"(first_failure=fire_parity). {str(e).splitlines()[0]}")
+            return {"status": "fail", "first_failure": "fire_parity", "error": str(e)}
+        print(f"[backtest] fire-parity (materialization) PASS: {rep['fires']} fires, "
+              f"0 disagreements {rep['tickers']}")
+    else:
+        print("[backtest] fire-parity: no reference declared, skipped")
+
     res = run_test(ann=ann, price_col="raw_close", start_date=start, n_boot=n_boot)
 
     def _h(h):
