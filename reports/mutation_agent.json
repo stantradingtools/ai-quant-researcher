@@ -1,0 +1,245 @@
+{
+  "thesis_id": "skew_consensus_v22_novix",
+  "n_tickers": 600,
+  "n_fires_baseline": 30535,
+  "start": "2014-01-01",
+  "n_folds": 5,
+  "dd_bound": -0.25,
+  "cost_bps": 20.0,
+  "search_space": {
+    "exit": 11,
+    "universe": 2,
+    "entry": 4
+  },
+  "n_candidates_this_run": 18,
+  "prior_trials_6b": 12,
+  "cumulative_trials": 30,
+  "baseline": {
+    "sharpe": 1.036,
+    "maxdd": -0.0525,
+    "mean_bps": 44.1,
+    "jan2021_bps": -309.7
+  },
+  "best": {
+    "name": "baseline_v22+6b_exits",
+    "kind": "baseline",
+    "exit": [
+      {
+        "type": "hard_stop",
+        "pct": 0.08
+      },
+      {
+        "type": "bollinger_reversion",
+        "n": 20,
+        "k": 2.0,
+        "target": "band"
+      },
+      {
+        "type": "time_backstop",
+        "bdays": 21
+      }
+    ],
+    "sharpe": 1.036,
+    "maxdd": -0.0525,
+    "mean_bps": 44.1,
+    "jan2021_bps": -309.7,
+    "folds_beat_baseline": 0,
+    "delta_sharpe": 0.0,
+    "delta_maxdd": 0.0
+  },
+  "mt_penalty": {
+    "cumulative_trials": 30,
+    "deflated_prob_real": 0.8741,
+    "deflated_pvalue": 0.1259,
+    "annualized_sharpe": 0.8906,
+    "expected_max_sharpe_under_null": 0.03613,
+    "bar": 0.95,
+    "survives": false
+  },
+  "promoted": false,
+  "verdict": "NO VALIDATED IMPROVEMENT \u2014 v22+exits is near a local optimum",
+  "log": [
+    {
+      "name": "baseline_v22+6b_exits",
+      "kind": "baseline",
+      "n_fires": 30535,
+      "pooled_sharpe": 1.036,
+      "pooled_maxdd": -0.0525,
+      "pooled_mean_bps": 44.1,
+      "jan2021_bps": -309.7,
+      "mean_hold_bd": 13.1
+    },
+    {
+      "name": "exit_hardstop_only_8",
+      "kind": "exit",
+      "n_fires": 30535,
+      "pooled_sharpe": 1.113,
+      "pooled_maxdd": -0.0831,
+      "pooled_mean_bps": 57.7,
+      "jan2021_bps": -225.7,
+      "mean_hold_bd": 15.6
+    },
+    {
+      "name": "exit_hardstop_6",
+      "kind": "exit",
+      "n_fires": 30535,
+      "pooled_sharpe": 1.1,
+      "pooled_maxdd": -0.0396,
+      "pooled_mean_bps": 38.0,
+      "jan2021_bps": -231.7,
+      "mean_hold_bd": 11.6
+    },
+    {
+      "name": "exit_hardstop_10",
+      "kind": "exit",
+      "n_fires": 30535,
+      "pooled_sharpe": 0.961,
+      "pooled_maxdd": -0.0623,
+      "pooled_mean_bps": 48.0,
+      "jan2021_bps": -358.7,
+      "mean_hold_bd": 14.2
+    },
+    {
+      "name": "exit_boll_band_only",
+      "kind": "exit",
+      "n_fires": 30535,
+      "pooled_sharpe": 0.365,
+      "pooled_maxdd": -0.2775,
+      "pooled_mean_bps": 57.5,
+      "jan2021_bps": -806.0,
+      "mean_hold_bd": 18.2
+    },
+    {
+      "name": "exit_hardstop_boll_mean",
+      "kind": "exit",
+      "n_fires": 30535,
+      "pooled_sharpe": 0.494,
+      "pooled_maxdd": -0.0673,
+      "pooled_mean_bps": 5.1,
+      "jan2021_bps": -176.1,
+      "mean_hold_bd": 9.2
+    },
+    {
+      "name": "exit_trailing_boll",
+      "kind": "exit",
+      "n_fires": 30535,
+      "pooled_sharpe": 0.751,
+      "pooled_maxdd": -0.05,
+      "pooled_mean_bps": 23.1,
+      "jan2021_bps": -247.7,
+      "mean_hold_bd": 11.3
+    },
+    {
+      "name": "exit_base_plus_vol",
+      "kind": "exit",
+      "n_fires": 30535,
+      "pooled_sharpe": 0.955,
+      "pooled_maxdd": -0.0468,
+      "pooled_mean_bps": 32.1,
+      "jan2021_bps": -198.1,
+      "mean_hold_bd": 11.6
+    },
+    {
+      "name": "exit_base_plus_squeeze",
+      "kind": "exit",
+      "n_fires": 30535,
+      "pooled_sharpe": 0.936,
+      "pooled_maxdd": -0.0592,
+      "pooled_mean_bps": 44.1,
+      "jan2021_bps": -164.2,
+      "mean_hold_bd": 12.1
+    },
+    {
+      "name": "exit_base_plus_tail",
+      "kind": "exit",
+      "n_fires": 30535,
+      "pooled_sharpe": 0.907,
+      "pooled_maxdd": -0.0513,
+      "pooled_mean_bps": 30.6,
+      "jan2021_bps": -101.7,
+      "mean_hold_bd": 10.9
+    },
+    {
+      "name": "exit_hardstop_profit",
+      "kind": "exit",
+      "n_fires": 30535,
+      "pooled_sharpe": 0.889,
+      "pooled_maxdd": -0.0574,
+      "pooled_mean_bps": 34.5,
+      "jan2021_bps": -377.1,
+      "mean_hold_bd": 13.8
+    },
+    {
+      "name": "exit_hardstop_5_tight",
+      "kind": "exit",
+      "n_fires": 30535,
+      "pooled_sharpe": 1.229,
+      "pooled_maxdd": -0.0413,
+      "pooled_mean_bps": 36.4,
+      "jan2021_bps": -153.2,
+      "mean_hold_bd": 10.6
+    },
+    {
+      "name": "universe_liquid_5",
+      "kind": "universe",
+      "n_fires": 27607,
+      "pooled_sharpe": 0.97,
+      "pooled_maxdd": -0.056,
+      "pooled_mean_bps": 43.3,
+      "jan2021_bps": -256.7,
+      "mean_hold_bd": 13.5
+    },
+    {
+      "name": "universe_liquid_10",
+      "kind": "universe",
+      "n_fires": 24407,
+      "pooled_sharpe": 0.866,
+      "pooled_maxdd": -0.0726,
+      "pooled_mean_bps": 45.8,
+      "jan2021_bps": -279.9,
+      "mean_hold_bd": 13.8
+    },
+    {
+      "name": "entry_corner_70_30",
+      "kind": "entry",
+      "n_fires": 36966,
+      "pooled_sharpe": 0.863,
+      "pooled_maxdd": -0.0566,
+      "pooled_mean_bps": 37.7,
+      "jan2021_bps": -349.3,
+      "mean_hold_bd": 13.2
+    },
+    {
+      "name": "entry_corner_80_20",
+      "kind": "entry",
+      "n_fires": 23996,
+      "pooled_sharpe": 1.124,
+      "pooled_maxdd": -0.0643,
+      "pooled_mean_bps": 51.7,
+      "jan2021_bps": -171.2,
+      "mean_hold_bd": 12.9
+    },
+    {
+      "name": "entry_freshness_5",
+      "kind": "entry",
+      "n_fires": 36959,
+      "pooled_sharpe": 1.064,
+      "pooled_maxdd": -0.0521,
+      "pooled_mean_bps": 42.6,
+      "jan2021_bps": -316.4,
+      "mean_hold_bd": 13.3
+    },
+    {
+      "name": "entry_sigma_1_5",
+      "kind": "entry",
+      "n_fires": 29402,
+      "pooled_sharpe": 0.944,
+      "pooled_maxdd": -0.0567,
+      "pooled_mean_bps": 41.2,
+      "jan2021_bps": -394.2,
+      "mean_hold_bd": 13.1
+    }
+  ],
+  "runtime_s": 87.6,
+  "updated_at": "2026-05-26T04:24:57+00:00"
+}

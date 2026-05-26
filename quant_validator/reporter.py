@@ -329,6 +329,43 @@ def _queue_block(p4: dict) -> str:
     return hdr + stats + table + skip_html + gap_html
 
 
+def _mutations_block(rep: dict) -> str:
+    """Mutations section (Agent #11): search space, cumulative MT count, best variant + deltas,
+    the MT-penalty-adjusted verdict, and the top candidates."""
+    m = rep.get("mutations")
+    if not m:
+        return ""
+    b, bs, mt = m["baseline"], m["best"], m["mt_penalty"]
+    ss = m["search_space"]
+    chip = _chip("pass" if m.get("promoted") else "flagged")
+    inner = (f'<p class="note">{chip} <b>{_esc(m.get("verdict"))}</b></p>'
+             f'<p class="cap">Thesis-locked search (core skew/RR/IV fade never mutated): '
+             f'{ss.get("exit",0)} exit + {ss.get("universe",0)} universe + {ss.get("entry",0)} entry '
+             f'= {m.get("n_candidates_this_run")} candidates this run &middot; cumulative MT trials '
+             f'{m.get("prior_trials_6b")} (6b) + {m.get("n_candidates_this_run")} = '
+             f'<b>{m.get("cumulative_trials")}</b>.</p>')
+    inner += _kv_table([
+        ("baseline (v22 + 6b exits)",
+         f"Sharpe {b['sharpe']} · maxDD {b['maxdd']} · {b['mean_bps']}bps · 2021-01 {b['jan2021_bps']}bps"),
+        ("best variant", f"{bs['name']} ({bs['kind']})"),
+        ("best vs baseline",
+         f"Sharpe Δ{bs['delta_sharpe']:+} · maxDD Δ{bs['delta_maxdd']:+} · "
+         f"folds beating baseline {bs['folds_beat_baseline']}"),
+        ("MT / DSR penalty",
+         f"n_trials {mt['cumulative_trials']} · deflated prob-real {mt['deflated_prob_real']} "
+         f"(bar {mt['bar']}) · survives {mt['survives']}")])
+    tc = m.get("top_candidates") or []
+    if tc:
+        head = ("<thead><tr><th>candidate</th><th>kind</th><th>fires</th><th>Sharpe</th>"
+                "<th>maxDD</th><th>mean bps</th><th>2021-01</th></tr></thead>")
+        rows = "".join(
+            f"<tr><td>{_esc(c['name'])}</td><td>{_esc(c['kind'])}</td><td>{c.get('n_fires',0):,}</td>"
+            f"<td>{c['pooled_sharpe']}</td><td>{c['pooled_maxdd']}</td><td>{c['pooled_mean_bps']}</td>"
+            f"<td>{c['jan2021_bps']}</td></tr>" for c in tc)
+        inner += f"<table>{head}<tbody>{rows}</tbody></table>"
+    return inner
+
+
 def render_html(rep: dict) -> str:
     s = rep.get("stages", {})
 
@@ -387,6 +424,11 @@ def render_html(rep: dict) -> str:
             ph_inner += _queue_block(pl)
     ph_status = ph.get("4_paper", {}).get("status", "not_started")
     secs.append(_section("Phases", ph_status, ph.get("4_paper", {}).get("updated_at", ""), ph_inner))
+
+    if rep.get("mutations"):
+        secs.append(_section("Mutations (Agent #11)",
+                             "pass" if rep["mutations"].get("promoted") else "flagged",
+                             rep["mutations"].get("updated_at", ""), _mutations_block(rep)))
 
     hdr = (
         f'<header class="band"><h1>{_esc(rep.get("strategy"))} {_chip(_overall_chip(rep))}</h1>'

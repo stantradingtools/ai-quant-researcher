@@ -1,0 +1,43 @@
+================================================================================================
+MUTATION AGENT (#11) — drawdown-constrained, MT-disciplined alpha optimiser (thesis-locked)
+================================================================================================
+sample 600 tickers (30,535 baseline fires) | 5 walk-forward folds from 2014-01-01 | DD bound -0.25 | cost 20bps | 87.6s
+search space: 11 exit (cheap) + 2 universe + 4 entry (expensive) = 18 candidates this run
+cumulative trials (MT count): 12 (6b) + 18 = 30
+
+baseline (v22 + 6b exits): Sharpe 1.036 | maxDD -0.0525 | mean 44.1bps | 2021-01 -309.7bps
+best variant: baseline_v22+6b_exits (baseline)
+  Sharpe 1.036 (Δ+0.0) | maxDD -0.0525 (Δ+0.0) | mean 44.1bps | folds beating baseline 0/5
+
+-- MULTIPLE-TESTING / DSR PENALTY ------------------------------------------------------------
+  cumulative trials n=30 -> expected max Sharpe under null 0.03613
+  best variant annualized Sharpe 0.8906 -> deflated prob-real 0.8741 (bar 0.95) | survives MT: False
+
+VERDICT: NO VALIDATED IMPROVEMENT — v22+exits is near a local optimum
+
+-- ALL CANDIDATES (logged; feeds the cumulative MT count) ------------------------------------
+  candidate                   |     kind|  fires| Sharpe|   maxDD| mean bps|  2021-01
+  baseline_v22+6b_exits       | baseline| 30,535|  1.036| -0.0525|     44.1|   -309.7
+  exit_hardstop_only_8        |     exit| 30,535|  1.113| -0.0831|     57.7|   -225.7
+  exit_hardstop_6             |     exit| 30,535|    1.1| -0.0396|     38.0|   -231.7
+  exit_hardstop_10            |     exit| 30,535|  0.961| -0.0623|     48.0|   -358.7
+  exit_boll_band_only         |     exit| 30,535|  0.365| -0.2775|     57.5|   -806.0
+  exit_hardstop_boll_mean     |     exit| 30,535|  0.494| -0.0673|      5.1|   -176.1
+  exit_trailing_boll          |     exit| 30,535|  0.751|   -0.05|     23.1|   -247.7
+  exit_base_plus_vol          |     exit| 30,535|  0.955| -0.0468|     32.1|   -198.1
+  exit_base_plus_squeeze      |     exit| 30,535|  0.936| -0.0592|     44.1|   -164.2
+  exit_base_plus_tail         |     exit| 30,535|  0.907| -0.0513|     30.6|   -101.7
+  exit_hardstop_profit        |     exit| 30,535|  0.889| -0.0574|     34.5|   -377.1
+  exit_hardstop_5_tight       |     exit| 30,535|  1.229| -0.0413|     36.4|   -153.2
+  universe_liquid_5           | universe| 27,607|   0.97|  -0.056|     43.3|   -256.7
+  universe_liquid_10          | universe| 24,407|  0.866| -0.0726|     45.8|   -279.9
+  entry_corner_70_30          |    entry| 36,966|  0.863| -0.0566|     37.7|   -349.3
+  entry_corner_80_20          |    entry| 23,996|  1.124| -0.0643|     51.7|   -171.2
+  entry_freshness_5           |    entry| 36,959|  1.064| -0.0521|     42.6|   -316.4
+  entry_sigma_1_5             |    entry| 29,402|  0.944| -0.0567|     41.2|   -394.2
+
+READOUT:
+  - Promote ONLY a walk-forward improvement (beats baseline Sharpe on a majority of folds,
+    within the DD bound, keeping >=50% of edge) that also SURVIVES the cumulative MT/DSR penalty.
+  - 'No validated improvement' = v22+exits is near a local optimum; an HONEST and valid outcome.
+  - Thesis-locked: the core skew/RR/IV fade is never mutated; only its knobs + exits + universe.

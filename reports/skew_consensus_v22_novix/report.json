@@ -3,7 +3,7 @@
   "version": 3,
   "run_mode": "A",
   "status": "validated + sized",
-  "updated_at": "2026-05-25T22:32:46+00:00",
+  "updated_at": "2026-05-26T04:24:57+00:00",
   "git_commit": "7533d7e",
   "stages": {
     "1_hypothesis": {
@@ -3592,5 +3592,142 @@
       "status": "not_started",
       "note": ""
     }
+  },
+  "mutations": {
+    "search_space": {
+      "exit": 11,
+      "universe": 2,
+      "entry": 4
+    },
+    "n_candidates_this_run": 18,
+    "prior_trials_6b": 12,
+    "cumulative_trials": 30,
+    "baseline": {
+      "sharpe": 1.036,
+      "maxdd": -0.0525,
+      "mean_bps": 44.1,
+      "jan2021_bps": -309.7
+    },
+    "best": {
+      "name": "baseline_v22+6b_exits",
+      "kind": "baseline",
+      "exit": [
+        {
+          "type": "hard_stop",
+          "pct": 0.08
+        },
+        {
+          "type": "bollinger_reversion",
+          "n": 20,
+          "k": 2.0,
+          "target": "band"
+        },
+        {
+          "type": "time_backstop",
+          "bdays": 21
+        }
+      ],
+      "sharpe": 1.036,
+      "maxdd": -0.0525,
+      "mean_bps": 44.1,
+      "jan2021_bps": -309.7,
+      "folds_beat_baseline": 0,
+      "delta_sharpe": 0.0,
+      "delta_maxdd": 0.0
+    },
+    "mt_penalty": {
+      "cumulative_trials": 30,
+      "deflated_prob_real": 0.8741,
+      "deflated_pvalue": 0.1259,
+      "annualized_sharpe": 0.8906,
+      "expected_max_sharpe_under_null": 0.03613,
+      "bar": 0.95,
+      "survives": false
+    },
+    "promoted": false,
+    "verdict": "NO VALIDATED IMPROVEMENT \u2014 v22+exits is near a local optimum",
+    "updated_at": "2026-05-26T04:24:57+00:00",
+    "top_candidates": [
+      {
+        "name": "exit_hardstop_5_tight",
+        "kind": "exit",
+        "n_fires": 30535,
+        "pooled_sharpe": 1.229,
+        "pooled_maxdd": -0.0413,
+        "pooled_mean_bps": 36.4,
+        "jan2021_bps": -153.2,
+        "mean_hold_bd": 10.6
+      },
+      {
+        "name": "entry_corner_80_20",
+        "kind": "entry",
+        "n_fires": 23996,
+        "pooled_sharpe": 1.124,
+        "pooled_maxdd": -0.0643,
+        "pooled_mean_bps": 51.7,
+        "jan2021_bps": -171.2,
+        "mean_hold_bd": 12.9
+      },
+      {
+        "name": "exit_hardstop_only_8",
+        "kind": "exit",
+        "n_fires": 30535,
+        "pooled_sharpe": 1.113,
+        "pooled_maxdd": -0.0831,
+        "pooled_mean_bps": 57.7,
+        "jan2021_bps": -225.7,
+        "mean_hold_bd": 15.6
+      },
+      {
+        "name": "exit_hardstop_6",
+        "kind": "exit",
+        "n_fires": 30535,
+        "pooled_sharpe": 1.1,
+        "pooled_maxdd": -0.0396,
+        "pooled_mean_bps": 38.0,
+        "jan2021_bps": -231.7,
+        "mean_hold_bd": 11.6
+      },
+      {
+        "name": "entry_freshness_5",
+        "kind": "entry",
+        "n_fires": 36959,
+        "pooled_sharpe": 1.064,
+        "pooled_maxdd": -0.0521,
+        "pooled_mean_bps": 42.6,
+        "jan2021_bps": -316.4,
+        "mean_hold_bd": 13.3
+      },
+      {
+        "name": "baseline_v22+6b_exits",
+        "kind": "baseline",
+        "n_fires": 30535,
+        "pooled_sharpe": 1.036,
+        "pooled_maxdd": -0.0525,
+        "pooled_mean_bps": 44.1,
+        "jan2021_bps": -309.7,
+        "mean_hold_bd": 13.1
+      },
+      {
+        "name": "universe_liquid_5",
+        "kind": "universe",
+        "n_fires": 27607,
+        "pooled_sharpe": 0.97,
+        "pooled_maxdd": -0.056,
+        "pooled_mean_bps": 43.3,
+        "jan2021_bps": -256.7,
+        "mean_hold_bd": 13.5
+      },
+      {
+        "name": "exit_hardstop_10",
+        "kind": "exit",
+        "n_fires": 30535,
+        "pooled_sharpe": 0.961,
+        "pooled_maxdd": -0.0623,
+        "pooled_mean_bps": 48.0,
+        "jan2021_bps": -358.7,
+        "mean_hold_bd": 14.2
+      }
+    ]
   }
 }
