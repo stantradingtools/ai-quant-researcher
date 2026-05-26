@@ -1,0 +1,11 @@
+# Binary assets — never apply EOL (CRLF) conversion. autocrlf=true would otherwise smudge
+# \n -> \r\n inside these on checkout and CORRUPT them (xref offsets, deflate streams, etc.).
+*.pdf   binary
+*.parquet binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.zip   binary
+*.db    binary
+*.xlsx  binary
+*.docx  binary
