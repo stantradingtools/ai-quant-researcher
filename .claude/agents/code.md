@@ -51,9 +51,10 @@ CONSTRAINTS:
    - numpy as np, pandas as pd, math
    - ai_quant_lab.features.library
    - ai_quant_lab.features.cross_sectional
-   - features_custom.skew, features_custom.vol, features_custom.exposure,
-     features_custom.pe_quadrant
    Any other import causes sandbox rejection.
+   features_custom.* (skew/vol/exposure/pe_quadrant) is Phase-2 and is NOT in the sandbox
+   allowlist yet -- a strategy importing it will raise SandboxError until Phase 2 widens
+   _ALLOWED_IMPORTS (gated on an import-safety audit of those modules).
 
 3. NEVER reference future bars. Use .shift(1) to make values tradeable.
    Use .rolling(window) for trailing computations. NEVER center=True.
@@ -85,7 +86,6 @@ Output ONLY a Python code block. No prose before or after.
 ```python
 import pandas as pd
 import numpy as np
-from features_custom.skew import skew_z_score
 
 def strategy(features: pd.DataFrame) -> pd.Series:
     # ... your code here ...
