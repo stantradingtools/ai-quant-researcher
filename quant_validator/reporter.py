@@ -362,8 +362,10 @@ def _mutations_block(rep: dict) -> str:
              f'{ss.get("exit",0)} exit + {ss.get("universe",0)} universe + {ss.get("entry",0)} entry '
              f'= {m.get("n_candidates_this_run")} candidates this run &middot; cumulative MT trials '
              f'{m.get("prior_trials_6b")} (6b) + {m.get("n_candidates_this_run")} = '
-             f'<b>{m.get("cumulative_trials")}</b>.</p>')
-    inner += _kv_table([
+             f'<b>{m.get("cumulative_trials")}</b>. Searched on '
+             f'{_esc(str((m.get("search_window") or {}).get("name", "PRIMARY (>=2018)")))}; '
+             f'pre-2018 held out as the leak-guard.</p>')
+    kv = [
         ("baseline (v22 + 6b exits)",
          f"Sharpe {b['sharpe']} · maxDD {b['maxdd']} · {b['mean_bps']}bps · 2021-01 {b['jan2021_bps']}bps"),
         ("best variant", f"{bs['name']} ({bs['kind']})"),
@@ -372,7 +374,15 @@ def _mutations_block(rep: dict) -> str:
          f"folds beating baseline {bs['folds_beat_baseline']}"),
         ("MT / DSR penalty",
          f"n_trials {mt['cumulative_trials']} · deflated prob-real {mt['deflated_prob_real']} "
-         f"(bar {mt['bar']}) · survives {mt['survives']}")])
+         f"(bar {mt['bar']}) · survives {mt['survives']}")]
+    ho = m.get("holdout")
+    if ho:
+        kv.append(("pre-2018 leak-guard (held out of search)",
+                   f"not available ({_esc(str(ho.get('reason', '')))})" if ho.get("status") != "ok"
+                   else (f"OOS {ho['window'][0]}..{ho['window'][1]} · {ho.get('n_fires', 0):,} fires · "
+                         f"Sharpe {ho.get('oos_sharpe')} · {ho.get('oos_mean_bps')}bps · "
+                         f"same-sign {ho.get('same_sign_as_primary')} · CONFIRMS {ho.get('confirms')}")))
+    inner += _kv_table(kv)
     tc = m.get("top_candidates") or []
     if tc:
         head = ("<thead><tr><th>candidate</th><th>kind</th><th>fires</th><th>Sharpe</th>"

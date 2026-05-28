@@ -43,8 +43,10 @@ import pandas as pd
 
 from . import backtest_path as bt
 from . import exit_agent as ea
+from .backtest import OOS_END, SPLIT_CUTOFF
 from .consensus_signal import ConsensusOpts, compute_consensus, signal_sign
 from .rebuild_returns import _load_symbol_map
+from .signal_vs_random import warmup_start_date
 from .stats import deflated_sharpe
 
 REPORTS = Path("reports")
@@ -118,10 +120,12 @@ def _sample_panel(n_tickers: int, seed: int = 0) -> pd.DataFrame:
     return df.sort_values(["ticker", "tradeDate"]).reset_index(drop=True)
 
 
-def _eligible(rows: pd.DataFrame, start: str) -> pd.DataFrame:
+def _eligible(rows: pd.DataFrame, start: str, end: str | None = None) -> pd.DataFrame:
     elig = (rows["side"].notna() & rows["av_matched"].astype(bool)
             & rows["fwd_available_21"].astype(bool) & (rows["raw_close"] >= 1.0)
             & (rows["av_fwd_21_total"].abs() <= 5.0) & (rows["tradeDate"] >= pd.Timestamp(start)))
+    if end is not None:   # OOS upper bound (pre-2018 leak-guard window)
+        elig &= (rows["tradeDate"] <= pd.Timestamp(end))
     f = rows[elig].copy()
     f["sign"] = f["side"].astype(str).map(signal_sign).astype(int)
     return f[["ticker", "tradeDate", "side", "sign", "raw_close", "av_fwd_21_total"]].reset_index(drop=True)
@@ -173,10 +177,34 @@ def _beats(score: dict, base: dict, dd_bound: float, n_folds: int) -> tuple[bool
     return (folds_beat >= maj and within_dd and edge_kept and beats_pooled), folds_beat
 
 
+def _oos_holdout(best: dict, rows: pd.DataFrame, smap: dict, oos_start: str, oos_end: str,
+                 cost_bps: float) -> dict:
+    """PRE-2018 LEAK-GUARD: re-score the CHOSEN variant on the held-out OOS window the search
+    never touched (warm-up floor .. oos_end). Reconstructs the variant's fires in that window
+    (entry re-fire / universe filter / plain) and walks its exit policy. Confirmation only."""
+    kind = best["kind"]
+    if kind == "entry":
+        of = _refire(rows, best["opts"], oos_start)
+        of = _map_avsym(of[of["tradeDate"] <= pd.Timestamp(oos_end)].reset_index(drop=True), smap)
+    else:
+        of = _map_avsym(_eligible(rows, oos_start, oos_end), smap)
+        if kind == "universe":
+            of = best["filt"](of).reset_index(drop=True)
+    if len(of) < 50:
+        return {"status": "not_available", "window": [str(oos_start), str(oos_end)],
+                "n_fires": int(len(of)), "reason": "too few OOS fires"}
+    of, obars = bt.prepare_bars(of, ea._UNION)
+    rets, _, _ = bt.walk_loaded(of, obars, best["exit"])
+    net = of["sign"].to_numpy(float) * rets - cost_bps / 1e4
+    m = ea._book_metrics(of["tradeDate"], net)
+    return {"status": "ok", "window": [str(oos_start), str(oos_end)], "n_fires": int(len(of)),
+            "oos_sharpe": m["sharpe"], "oos_mean_bps": round(m["mean_bps"], 1), "oos_maxdd": m["maxdd"]}
+
+
 # ── the closed loop ────────────────────────────────────────────────────────
 
 def optimise(thesis_id: str = "skew_consensus_v22_novix", n_tickers: int = 600, n_folds: int = 5,
-             start: str = "2014-01-01", dd_bound: float = -0.25, cost_bps: float = 20.0,
+             start: str = SPLIT_CUTOFF, dd_bound: float = -0.25, cost_bps: float = 20.0,
              do_entry: bool = True, write: bool = True) -> dict:
     t0 = time.time()
     smap = _load_symbol_map()
@@ -218,7 +246,8 @@ def optimise(thesis_id: str = "skew_consensus_v22_novix", n_tickers: int = 600, 
         sc = evaluate(fsub, best["exit"], name, "universe")
         ok, _ = _beats(sc, base, dd_bound, n_folds)
         if ok and sc["pooled"]["sharpe"] > best["score"]["pooled"]["sharpe"]:
-            best = {"name": name, "kind": "universe", "score": sc, "fires": fsub, "exit": best["exit"]}
+            best = {"name": name, "kind": "universe", "score": sc, "fires": fsub,
+                    "exit": best["exit"], "filt": filt}
 
     # ── stage 3: ENTRY re-fires (expensive, sparse) — on the best-so-far exit ──
     if do_entry:
@@ -229,7 +258,8 @@ def optimise(thesis_id: str = "skew_consensus_v22_novix", n_tickers: int = 600, 
             sc = evaluate(fre, best["exit"], name, "entry")
             ok, _ = _beats(sc, base, dd_bound, n_folds)
             if ok and sc["pooled"]["sharpe"] > best["score"]["pooled"]["sharpe"]:
-                best = {"name": name, "kind": "entry", "score": sc, "fires": fre, "exit": best["exit"]}
+                best = {"name": name, "kind": "entry", "score": sc, "fires": fre,
+                        "exit": best["exit"], "opts": opts}
 
     runtime = round(time.time() - t0, 1)
 
@@ -244,8 +274,22 @@ def optimise(thesis_id: str = "skew_consensus_v22_novix", n_tickers: int = 600, 
     improved = best["name"] != "baseline_v22+6b_exits"
     beats_base, folds_beat = _beats(bsc, base, dd_bound, n_folds) if improved else (False, 0)
     mt_survives = prob_real >= DSR_PROB_BAR
-    promoted = bool(improved and beats_base and mt_survives)
-    verdict = ("PROMOTE" if promoted else
+
+    # ── PRE-2018 LEAK-GUARD: confirm the chosen variant on the held-out OOS (search never saw it) ──
+    oos_start = warmup_start_date(rows["tradeDate"].min())
+    holdout = _oos_holdout(best, rows, smap, oos_start, OOS_END, cost_bps)
+    holdout["primary_sharpe"] = bsc["pooled"]["sharpe"]
+    holdout["primary_mean_bps"] = round(bsc["pooled"]["mean_bps"], 1)
+    holdout["same_sign_as_primary"] = bool(
+        holdout.get("status") == "ok"
+        and (holdout["oos_mean_bps"] > 0) == (bsc["pooled"]["mean_bps"] > 0))
+    holdout["confirms"] = bool(holdout.get("status") == "ok" and holdout.get("oos_mean_bps", 0) > 0
+                               and holdout["same_sign_as_primary"] and holdout.get("oos_sharpe", 0) > 0)
+
+    promoted = bool(improved and beats_base and mt_survives and holdout["confirms"])
+    verdict = ("PROMOTE (survives MT + pre-2018 leak-guard)" if promoted else
+               "REJECTED BY PRE-2018 LEAK-GUARD (held on PRIMARY, failed the pre-2018 OOS)"
+               if (improved and beats_base and mt_survives and not holdout["confirms"]) else
                "NO VALIDATED IMPROVEMENT — v22+exits is near a local optimum")
 
     result = {
@@ -267,6 +311,8 @@ def optimise(thesis_id: str = "skew_consensus_v22_novix", n_tickers: int = 600, 
                        "deflated_pvalue": dsr.get("dsr_pvalue"), "annualized_sharpe": dsr.get("annualized_sharpe"),
                        "expected_max_sharpe_under_null": dsr.get("expected_max_sharpe_under_null"),
                        "bar": DSR_PROB_BAR, "survives": mt_survives},
+        "search_window": {"start": str(start), "end": None, "name": "PRIMARY (>=2018)"},
+        "holdout": holdout,
         "promoted": promoted, "verdict": verdict, "log": log, "runtime_s": runtime,
         "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     if write:
@@ -277,6 +323,15 @@ def optimise(thesis_id: str = "skew_consensus_v22_novix", n_tickers: int = 600, 
 
 
 # ── reporting ──────────────────────────────────────────────────────────────
+
+def _holdout_txt(h: dict) -> str:
+    if h.get("status") != "ok":
+        return (f"  pre-2018 OOS: {h.get('status')} ({h.get('reason', '')}) "
+                f"— n_fires {h.get('n_fires', 0):,}")
+    return (f"  pre-2018 OOS ({h['window'][0]}..{h['window'][1]}): n_fires {h['n_fires']:,} | "
+            f"Sharpe {h['oos_sharpe']} | mean {h['oos_mean_bps']}bps | maxDD {h['oos_maxdd']} | "
+            f"same-sign {h['same_sign_as_primary']} | CONFIRMS {h['confirms']}")
+
 
 def _write_report(r: dict) -> None:
     REPORTS.mkdir(parents=True, exist_ok=True)
@@ -306,6 +361,9 @@ def _write_report(r: dict) -> None:
          f"{r['mt_penalty']['deflated_prob_real']} (bar {r['mt_penalty']['bar']}) | "
          f"survives MT: {r['mt_penalty']['survives']}",
          "",
+         "-- PRE-2018 LEAK-GUARD (search held out the pre-2018 OOS) " + "-" * 37,
+         _holdout_txt(r["holdout"]),
+         "",
          f"VERDICT: {r['verdict']}",
          "",
          "-- ALL CANDIDATES (logged; feeds the cumulative MT count) " + "-" * 36,
@@ -331,7 +389,7 @@ def _write_report_html(thesis_id: str, r: dict) -> None:
     rep = json.loads(jpath.read_text(encoding="utf-8"))
     rep["mutations"] = {k: r[k] for k in ("search_space", "n_candidates_this_run", "prior_trials_6b",
                                           "cumulative_trials", "baseline", "best", "mt_penalty",
-                                          "promoted", "verdict", "updated_at")}
+                                          "holdout", "search_window", "promoted", "verdict", "updated_at")}
     rep["mutations"]["top_candidates"] = sorted(
         r["log"], key=lambda c: (c["pooled_sharpe"] if c["pooled_sharpe"] == c["pooled_sharpe"] else -9))[-8:][::-1]
     rep["updated_at"] = r["updated_at"]
@@ -355,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
     po.add_argument("--thesis_id", default="skew_consensus_v22_novix")
     po.add_argument("--tickers", type=int, default=600)
     po.add_argument("--n-folds", type=int, default=5)
-    po.add_argument("--start", default="2014-01-01")
+    po.add_argument("--start", default=SPLIT_CUTOFF)
     po.add_argument("--dd-bound", type=float, default=-0.25)
     po.add_argument("--no-entry", action="store_true", help="skip the expensive entry re-fires")
     args = ap.parse_args(argv)
