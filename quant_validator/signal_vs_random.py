@@ -90,7 +90,7 @@ def _per_ticker_signal_and_fwd(uni: pd.DataFrame, horizons=HORIZONS,
 
 
 def run_test(uni: pd.DataFrame = None, horizons=HORIZONS, opts: ConsensusOpts = ConsensusOpts(),
-             n_boot: int = 2000, seed: int = 0, start_date: str = None,
+             n_boot: int = 2000, seed: int = 0, start_date: str = None, end_date: str = None,
              price_floor: float = 1.0, max_abs_fwd: float = 5.0,
              pit_ivp: bool = False, match_high_iv: bool = False,
              iv_match_threshold: float = 75.0,
@@ -120,10 +120,13 @@ def run_test(uni: pd.DataFrame = None, horizons=HORIZONS, opts: ConsensusOpts = 
     n_raw = int(len(fires))
     if start_date is not None:
         fires = fires[fires["tradeDate"] >= pd.Timestamp(start_date)].copy()
+    if end_date is not None:   # OOS upper bound — mirror of start_date (consensus/fwd still full-panel)
+        fires = fires[fires["tradeDate"] <= pd.Timestamp(end_date)].copy()
 
     results = {"n_signals_raw": n_raw,
                "n_signals_scored": int(len(fires)),
                "start_date": start_date,
+               "end_date": end_date,
                "scored_date_range": ([str(pd.Timestamp(fires["tradeDate"].min()).date()),
                                       str(pd.Timestamp(fires["tradeDate"].max()).date())]
                                      if len(fires) else None),

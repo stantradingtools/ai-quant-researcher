@@ -205,6 +205,25 @@ def _verdict_table(v: dict) -> str:
     return f"<table>{head}<tbody>{rows}</tbody></table>"
 
 
+def _oos_block(o: dict | None) -> str:
+    """OOS holdout (pre-2018) confirmation, rendered beside the PRIMARY verdict (stage 6)."""
+    if not o:
+        return ""
+    if o.get("status") == "not_available":
+        return ('<p class="note"><b>OOS holdout (pre-2018):</b> not available &mdash; '
+                f'{_esc(str(o.get("reason", "0 fires in window")))} '
+                f'(requested {_esc(str(o.get("requested_oos_start")))}).</p>')
+    tag = "confirms" if o.get("confirms") else "does NOT confirm"
+    clamp = (f' (requested {_esc(str(o.get("requested_oos_start")))}, clamped to the panel floor)'
+             if o.get("clamped") else "")
+    return ('<p class="note"><b>OOS holdout (pre-2018) &mdash; ' + tag + '.</b> '
+            f'21d increment {o.get("oos_increment_21d"):+.1f} bps, z {o.get("oos_z"):+.2f}, '
+            f'p {o.get("oos_p"):.4f} over {o.get("oos_n_fires"):,} fires; window '
+            f'{_esc(str(o.get("realized_oos_start")))} &rarr; 2017-12-31{clamp}. '
+            f'Same sign as PRIMARY: {o.get("same_sign_as_primary")}; significant: '
+            f'{o.get("oos_significant")}. Confirmation only &mdash; PRIMARY drives the gates.</p>')
+
+
 def _live_orats_block(p4: dict) -> str:
     """Phase-4 live ORATS feed status: today's fire count + L/S split + signal date."""
     lo = p4.get("live_orats")
@@ -387,6 +406,7 @@ def render_html(rep: dict) -> str:
         inner = f'<p class="note">{_esc(note)}</p>' if note else ""
         if key == "6_vs_random" and s.get(key, {}).get("verdict"):
             inner += _verdict_table(s[key]["verdict"])
+            inner += _oos_block(s[key].get("oos"))
         if key == "9_risk":
             r9 = s.get(key, {})
             if r9.get("metrics"):
@@ -524,7 +544,12 @@ def backfill_v22(strategy: str = "skew_consensus_v22_novix") -> dict:
                 "verdict": {
                     "5":  {"increment": 1.3, "random": 13.0, "gross": 14.3, "z": 1.21, "p": 0.114, "beat": 0.510},
                     "10": {"increment": 5.1, "random": 26.3, "gross": 31.4, "z": 3.54, "p": 0.0005, "beat": 0.513},
-                    "21": {"increment": 18.2, "random": 88.8, "gross": 107.0, "z": 8.87, "p": 0.0005, "beat": 0.516}}},
+                    "21": {"increment": 18.2, "random": 88.8, "gross": 107.0, "z": 8.87, "p": 0.0005, "beat": 0.516}},
+                "oos": {"status": "ok", "requested_oos_start": "2010-01-01",
+                        "realized_oos_start": "2013-11-26", "clamped": True,
+                        "oos_increment_21d": 15.27, "oos_z": 4.576, "oos_p": 0.0005,
+                        "oos_n_fires": 113292, "same_sign_as_primary": True,
+                        "oos_significant": True, "confirms": True}},
             "7_validator": {"status": "pass", "updated_at": now,
                 "note": "Critic-validator 9-criteria + placebo from the prior validation "
                         "(critique_post.json) now backed by present results/. Standing items are the "

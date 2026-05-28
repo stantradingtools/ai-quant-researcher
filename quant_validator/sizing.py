@@ -55,7 +55,7 @@ PRICE_FLOOR, MAX_ABS_FWD = 1.0, 5.0
 # ── 1. Position panel (the generic interface) ─────────────────────────────
 
 def build_position_panel(panel_path: Path = CLEAN_PANEL, cost_bps: float = 20.0,
-                         start: str = START) -> pd.DataFrame:
+                         start: str = START, end: str | None = None) -> pd.DataFrame:
     """Strategy fires -> tidy (date, symbol, signal_sign, net_return) book.
 
     net_return = signal_sign * av_fwd_21_total - round_trip_cost. Any strategy that
@@ -67,6 +67,8 @@ def build_position_panel(panel_path: Path = CLEAN_PANEL, cost_bps: float = 20.0,
             & (p["raw_close"] >= PRICE_FLOOR)
             & (p["av_fwd_21_total"].abs() <= MAX_ABS_FWD)
             & (p["tradeDate"] >= pd.Timestamp(start)))
+    if end is not None:   # OOS upper bound for the sizing/returns panel
+        elig &= (p["tradeDate"] <= pd.Timestamp(end))
     f = p[elig].copy()
     f["signal_sign"] = f["side"].astype(str).map(signal_sign).astype(float)
     f["net_return"] = f["signal_sign"] * f["av_fwd_21_total"] - cost_bps / 1e4

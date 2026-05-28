@@ -11,7 +11,7 @@ ARGUMENTS: $ARGUMENTS
 Parse $ARGUMENTS into three components:
 1. thesis_id (first token)
 2. failure_key (second token — one of: critic_pre, critic_validator,
-   gates:deflated_sharpe, gates:correlation, gates:pca, risk, vs_random)
+   gates:deflated_sharpe, gates:correlation, gates:pca, risk, vs_random, oos_holdout)
 3. --reason "<text>" (everything after --reason flag)
 
 ═══════════════════════════════════════════════════════════════
@@ -39,6 +39,7 @@ OVERRIDABLE failures (allow override to proceed):
 - gates:correlation
 - gates:pca
 - risk
+- oos_holdout
 
 NON-OVERRIDABLE failures (refuse and explain):
 - sandbox_error (broken code)
@@ -89,6 +90,7 @@ Determine the resume_step:
 - critic_validator failure (step 7)       → resume step 8
 - gates:* failure (step 8)                → resume step 9
 - risk failure (step 9)                   → resume step 10
+- oos_holdout (step 5 confirmation)       → no resume (non-halting holdout warning; logs ack only)
 
 Then run the remaining pipeline steps in order. Each step still has
 its own checkpoints — if another step later fails, ANOTHER override

@@ -41,6 +41,21 @@ from .sizing import build_position_panel
 CLEAN_PANEL = Path("data/av/signal_panel_clean.parquet")
 ANN = 252
 
+# ── PRIMARY / OOS window split ────────────────────────────────────────────
+# PRIMARY = the recent regime (tradeDate >= SPLIT_CUTOFF): the MAIN verdict that drives the
+# gate stack. OOS = the held-out OLD regime (<= OOS_END): a confirmation only. OOS_START sits
+# below the panel on purpose; run() clamps any requested start UP to the warm-up floor, so the
+# realized OOS start is the panel floor (~2013-11-26), recorded as `clamped` in the confirmation.
+SPLIT_CUTOFF = "2018-01-01"
+OOS_START, OOS_END = "2010-01-01", "2017-12-31"
+
+
+def resolve_window(name: str) -> tuple[str | None, str | None]:
+    """window name -> (start, end). 'full' preserves the legacy single-window baseline."""
+    return {"primary": (SPLIT_CUTOFF, None),
+            "oos": (OOS_START, OOS_END),
+            "full": (None, None)}[name]
+
 
 def _load_spec(thesis_id: str) -> dict | None:
     """thesis_id -> theses/<id>/refined.json (the spec). None if absent — a novel thesis with
@@ -67,13 +82,16 @@ def _resolve_reference_fn(spec: dict | None):
 
 
 def run(thesis_id: str, panel_path: Path = CLEAN_PANEL, start: str | None = None,
-        cost_bps: float = 20.0, n_boot: int = 2000, spec: dict | None = None) -> dict:
+        end: str | None = None, cost_bps: float = 20.0, n_boot: int = 2000,
+        spec: dict | None = None) -> dict:
     res_dir = Path(f"theses/{thesis_id}/results")
     res_dir.mkdir(parents=True, exist_ok=True)
     panel = pd.read_parquet(panel_path, columns=clean_run_columns())
     # Project warm-up convention: first tradeable signal = panel_start + 756 bdays (3yr ORATS).
-    if start is None:
-        start = warmup_start_date(panel["tradeDate"].min())
+    # CLAMP any requested start UP to the warm-up floor so a window (e.g. OOS_START=2010) never
+    # scores un-warmed fires; the realized start becomes the panel floor (recorded downstream).
+    wstart = warmup_start_date(panel["tradeDate"].min())
+    start = wstart if start is None else (str(start) if str(start) >= str(wstart) else wstart)
 
     # 1) VERDICT — single screen via run_test (de-duped). The clean panel's `side` is
     #    the RAW consensus (== the generated strategy's fires, byte-identical pre-screen),
@@ -107,7 +125,7 @@ def run(thesis_id: str, panel_path: Path = CLEAN_PANEL, start: str | None = None
     else:
         print("[backtest] fire-parity: no reference declared, skipped")
 
-    res = run_test(ann=ann, price_col="raw_close", start_date=start, n_boot=n_boot)
+    res = run_test(ann=ann, price_col="raw_close", start_date=start, end_date=end, n_boot=n_boot)
 
     def _h(h):
         return res["horizons"].get(h) or res["horizons"].get(str(h)) or {}
@@ -124,9 +142,21 @@ def run(thesis_id: str, panel_path: Path = CLEAN_PANEL, start: str | None = None
                 "z": round(r["z"], 3), "p": r["p_value"],
                 "beat": round(r["beat_pool_median_rate"], 4)}
     n_fires = horizons.get("21", {}).get("n", 0)
+    scored_range = res.get("scored_date_range")
+    window = {"start": start, "end": end}
+    if n_fires == 0:   # empty window (e.g. OOS clamped past the panel) -> not_available, never crash
+        (res_dir / "vs_random.json").write_text(json.dumps({
+            "status": "not_available", "source": "fires_adapter", "overall_verdict": "n/a",
+            "reason": f"0 fires scored in window start={start} end={end}",
+            "window": window, "scored_date_range": scored_range, "horizons": {},
+            "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")},
+            indent=2), encoding="utf-8")
+        print(f"[backtest] {thesis_id}: 0 fires in window (start={start} end={end}) -> not_available")
+        return {"status": "not_available", "n_fires": 0, "window": window,
+                "scored_date_range": scored_range}
 
     # 2) per-trade net-return panel + canonical returns/positions
-    pp = build_position_panel(panel_path, cost_bps=cost_bps, start=start)
+    pp = build_position_panel(panel_path, cost_bps=cost_bps, start=start, end=end)
     pp.to_csv(res_dir / "net_return_panel.csv", index=False)
     daily = pp.groupby("date")["net_return"].mean().sort_index()       # equal-weight book return / entry date
     daily.index.name = "date"
@@ -141,6 +171,7 @@ def run(thesis_id: str, panel_path: Path = CLEAN_PANEL, start: str | None = None
             f"pool, z {h21.get('z')}, p {h21.get('p')} (NOT a timing-permutation test)")
     vr = {"status": "ok", "source": "fires_adapter", "overall_verdict": "pass",
           "method": "date/direction-matched random pool (signal_vs_random.run_test)",
+          "window": window, "scored_date_range": scored_range,
           "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
           "tiers": {"A": {"verdict": "pass", "actual_sharpe": round(sharpe, 4),
                           "random_sharpe_p95": 0.0, "actual_percentile_vs_random": 99.0,
@@ -151,7 +182,67 @@ def run(thesis_id: str, panel_path: Path = CLEAN_PANEL, start: str | None = None
     print(f"[backtest] {thesis_id}: {n_fires:,} scored fires | 21d incr={h21.get('increment_bps')} bps "
           f"gross={h21.get('gross_bps')} z={h21.get('z')} | strategy daily Sharpe={sharpe:.2f}")
     print(f"[backtest] wrote results/{{vs_random.json, returns.csv, positions.csv, net_return_panel.csv}}")
-    return {"horizons": horizons, "sharpe": sharpe, "n_fires": n_fires}
+    return {"horizons": horizons, "sharpe": sharpe, "n_fires": n_fires,
+            "window": window, "scored_date_range": scored_range}
+
+
+def _read_vr(thesis_id: str) -> dict | None:
+    p = Path(f"theses/{thesis_id}/results/vs_random.json")
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _build_oos_confirmation(thesis_id: str, requested_oos_start: str) -> dict:
+    """Fold the OOS (<id>__oos) verdict back beside PRIMARY: same-sign + significance; never crash."""
+    prim = _read_vr(thesis_id) or {}
+    oos = _read_vr(f"{thesis_id}__oos") or {}
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    p21 = (prim.get("horizons") or {}).get("21") or {}
+    o21 = (oos.get("horizons") or {}).get("21") or {}
+    realized = (oos.get("scored_date_range") or [None])[0]
+    if oos.get("status") == "not_available" or not o21:   # OOS scored nothing -> not_available
+        return {"status": "not_available", "requested_oos_start": requested_oos_start,
+                "realized_oos_start": realized, "clamped": True,
+                "reason": oos.get("reason", "OOS window scored 0 fires (clamped past panel floor)"),
+                "primary_increment_21d": p21.get("increment_bps"), "updated_at": now}
+    oos_inc, prim_inc, oos_p = o21.get("increment_bps"), p21.get("increment_bps"), o21.get("p")
+    same_sign = (oos_inc is not None and prim_inc is not None and (oos_inc > 0) == (prim_inc > 0))
+    oos_sig = (oos_p is not None and oos_p < 0.05)
+    return {"status": "ok", "requested_oos_start": requested_oos_start,
+            "realized_oos_start": realized,
+            "clamped": bool(realized and str(realized) > str(requested_oos_start)),
+            "primary_increment_21d": prim_inc, "primary_z": p21.get("z"),
+            "oos_increment_21d": oos_inc, "oos_z": o21.get("z"), "oos_p": oos_p,
+            "oos_n_fires": o21.get("n"),
+            "same_sign_as_primary": bool(same_sign), "oos_significant": bool(oos_sig),
+            "confirms": bool(same_sign and oos_sig), "updated_at": now}
+
+
+def run_split(thesis_id: str, panel_path: Path = CLEAN_PANEL, cost_bps: float = 20.0,
+              n_boot: int = 2000) -> dict:
+    """Backtest STAGE: score PRIMARY (canonical, drives the gate stack) and the OOS holdout,
+    then write theses/<id>/results/oos_confirmation.json. The SAME spec is passed to both, so
+    the fire-parity gate runs for each (it is window-independent — full panel, pre date-filter)."""
+    spec = _load_spec(thesis_id)
+    p_start, p_end = resolve_window("primary")
+    o_start, o_end = resolve_window("oos")
+    print(f"[backtest] PRIMARY window start={p_start} end={p_end} -> theses/{thesis_id}/results/")
+    run(thesis_id, panel_path=panel_path, start=p_start, end=p_end,
+        cost_bps=cost_bps, n_boot=n_boot, spec=spec)
+    print(f"[backtest] OOS window start={o_start} end={o_end} -> theses/{thesis_id}__oos/results/")
+    run(f"{thesis_id}__oos", panel_path=panel_path, start=o_start, end=o_end,
+        cost_bps=cost_bps, n_boot=n_boot, spec=spec)
+    conf = _build_oos_confirmation(thesis_id, requested_oos_start=o_start)
+    (Path(f"theses/{thesis_id}/results") / "oos_confirmation.json").write_text(
+        json.dumps(conf, indent=2), encoding="utf-8")
+    print(f"[backtest] OOS confirmation: status={conf.get('status')} "
+          f"same_sign={conf.get('same_sign_as_primary')} significant={conf.get('oos_significant')} "
+          f"realized_oos_start={conf.get('realized_oos_start')}")
+    return conf
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -161,9 +252,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--thesis_id", required=True)
     p.add_argument("--engine", default="fires", help="(fires-frame adapter; the only engine)")
     p.add_argument("--cost-bps", type=float, default=20.0)
+    p.add_argument("--start", default=None, help="score fires on/after this date (clamped to warm-up)")
+    p.add_argument("--end", default=None, help="score fires on/before this date")
+    p.add_argument("--window", choices=["primary", "oos", "full"], default=None,
+                   help="preset window {primary|oos|full}; overrides --start/--end")
+    ps = sub.add_parser("run-split",
+                        help="score PRIMARY + OOS holdout and write oos_confirmation.json")
+    ps.add_argument("--thesis_id", required=True)
+    ps.add_argument("--cost-bps", type=float, default=20.0)
     args = ap.parse_args(argv)
     if args.cmd == "run":
-        run(args.thesis_id, cost_bps=args.cost_bps)
+        start, end = args.start, args.end
+        if args.window:
+            start, end = resolve_window(args.window)
+        run(args.thesis_id, start=start, end=end, cost_bps=args.cost_bps)
+        return 0
+    if args.cmd == "run-split":
+        run_split(args.thesis_id, cost_bps=args.cost_bps)
         return 0
     return 1
 

@@ -132,11 +132,22 @@ Default on --no-pause: abort.
 STEP 5 — Backtest (Mode A) or verify (Mode B)
 
 MODE_A: Run via Bash:
-  python -m quant_validator.backtest run \
+  python -m quant_validator.backtest run-split \
     --thesis_id <thesis_id>
-The fires-frame adapter is the only engine (--engine defaults to "fires" and is the sole
-value; there is no vectorized/event-driven split). Nothing to cross-check here -- the single
-run writes results/{vs_random.json, returns.csv, positions.csv, net_return_panel.csv}.
+Scores TWO windows off the warmed panel (the split is a fire-scoring date filter — the signal
+is NOT recomputed, so percentiles stay warm-up-correct):
+  - PRIMARY (tradeDate >= 2018-01-01): the CANONICAL verdict -> theses/<thesis_id>/results/.
+    Drives the entire downstream gate stack unchanged. Writes results/{vs_random.json,
+    returns.csv, positions.csv, net_return_panel.csv}.
+  - OOS holdout (<= 2017-12-31, requested start clamped UP to the panel floor): a confirmation
+    -> theses/<thesis_id>__oos/results/, folded into theses/<thesis_id>/results/oos_confirmation.json.
+The fires-frame adapter is the only engine. Legacy single-window baseline (regression):
+  python -m quant_validator.backtest run --thesis_id <thesis_id> --window full
+
+CHECKPOINT (OOS holdout): read theses/<thesis_id>/results/oos_confirmation.json. If
+status=="not_available", treat as N/A. Else if NOT same_sign_as_primary OR NOT oos_significant,
+emit a SOFT warning (overridable as oos_holdout) — a CONFIRMATION, not a hard fail; the PRIMARY
+verdict still drives the gates. Default on --no-pause: warn and continue.
 
 MODE_B: Confirm these files exist in theses/<thesis_id>/results/:
   positions.csv, returns.csv, equity_curve.csv
