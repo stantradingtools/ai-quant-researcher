@@ -377,9 +377,9 @@ def _mutations_block(rep: dict) -> str:
          f"(bar {mt['bar']}) · survives {mt['survives']}")]
     ho = m.get("holdout")
     if ho:
-        kv.append(("pre-2018 leak-guard (held out of search)",
+        kv.append(("pre-2018 leak-guard (sampled walk-forward; ≠ the full OOS verdict)",
                    f"not available ({_esc(str(ho.get('reason', '')))})" if ho.get("status") != "ok"
-                   else (f"OOS {ho['window'][0]}..{ho['window'][1]} · {ho.get('n_fires', 0):,} fires · "
+                   else (f"OOS {ho['window'][0]}..{ho['window'][1]} · {ho.get('n_fires', 0):,} sampled fires · "
                          f"Sharpe {ho.get('oos_sharpe')} · {ho.get('oos_mean_bps')}bps · "
                          f"same-sign {ho.get('same_sign_as_primary')} · CONFIRMS {ho.get('confirms')}")))
     inner += _kv_table(kv)
@@ -416,6 +416,12 @@ def render_html(rep: dict) -> str:
         inner = f'<p class="note">{_esc(note)}</p>' if note else ""
         if key == "6_vs_random" and s.get(key, {}).get("verdict"):
             inner += _verdict_table(s[key]["verdict"])
+            ar = s[key].get("all_data_ref")
+            if ar:
+                inner += (f'<p class="note"><b>All-data reference (full window, the sizing basis):</b> '
+                          f'21d +{ar["increment_21d"]:.2f} bps, z {ar["z"]:.2f} over {ar["n"]:,} fires '
+                          f'(2013-11-26&rarr;2026, the pre-split canonical). PRIMARY (above) is the '
+                          f'deployment-regime verdict that drives the gates.</p>')
             inner += _oos_block(s[key].get("oos"))
         if key == "9_risk":
             r9 = s.get(key, {})
@@ -547,14 +553,15 @@ def backfill_v22(strategy: str = "skew_consensus_v22_novix") -> dict:
                         "(walk-forward fold-mean 1.31, 1 negative fold); Deflated Sharpe p-value "
                         "0.006, prob-real 0.994 (edge survives deflation for n_trials=3)."},
             "6_vs_random": {"status": "pass", "updated_at": now,
-                "note": "Date/direction-matched random pool, total-return, full survivorship-free "
-                        "universe, from 2013-11-26 (756-bday / 3yr ORATS warm-up). Single eligibility "
-                        "screen (de-duped via the adapter) -> 21d z 8.87, parity with the Mode-B "
-                        "reference held under the later start (+18.15 vs +18.28 bps; gross +106.96 vs +106.53).",
+                "note": "PRIMARY (>=2018) is the CANONICAL verdict (the deployment regime; drives the "
+                        "gate stack); the pre-2018 OOS is the held-out confirmation; the full-window "
+                        "figure is retained below as the all-data reference / sizing basis. "
+                        "Date/direction-matched random pool, total-return, survivorship-free.",
                 "verdict": {
-                    "5":  {"increment": 1.3, "random": 13.0, "gross": 14.3, "z": 1.21, "p": 0.114, "beat": 0.510},
-                    "10": {"increment": 5.1, "random": 26.3, "gross": 31.4, "z": 3.54, "p": 0.0005, "beat": 0.513},
-                    "21": {"increment": 18.2, "random": 88.8, "gross": 107.0, "z": 8.87, "p": 0.0005, "beat": 0.516}},
+                    "5":  {"increment": 1.04, "random": 8.42, "gross": 9.45, "z": 0.79, "p": 0.223, "beat": 0.5115},
+                    "10": {"increment": 4.49, "random": 17.01, "gross": 21.5, "z": 2.54, "p": 0.006, "beat": 0.515},
+                    "21": {"increment": 19.15, "random": 95.16, "gross": 114.3, "z": 7.53, "p": 0.0005, "beat": 0.5184}},
+                "all_data_ref": {"increment_21d": 18.15, "z": 8.873, "n": 454798, "gross": 106.96},
                 "oos": {"status": "ok", "requested_oos_start": "2010-01-01",
                         "realized_oos_start": "2013-11-26", "clamped": True,
                         "oos_increment_21d": 15.27, "oos_z": 4.576, "oos_p": 0.0005,

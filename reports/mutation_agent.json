@@ -1,8 +1,8 @@
 {
   "thesis_id": "skew_consensus_v22_novix",
   "n_tickers": 600,
-  "n_fires_baseline": 30535,
-  "start": "2014-01-01",
+  "n_fires_baseline": 22921,
+  "start": "2018-01-01",
   "n_folds": 5,
   "dd_bound": -0.25,
   "cost_bps": 20.0,
@@ -15,9 +15,9 @@
   "prior_trials_6b": 12,
   "cumulative_trials": 30,
   "baseline": {
-    "sharpe": 1.036,
+    "sharpe": 1.437,
     "maxdd": -0.0525,
-    "mean_bps": 44.1,
+    "mean_bps": 52.1,
     "jan2021_bps": -309.7
   },
   "best": {
@@ -39,9 +39,9 @@
         "bdays": 21
       }
     ],
-    "sharpe": 1.036,
+    "sharpe": 1.437,
     "maxdd": -0.0525,
-    "mean_bps": 44.1,
+    "mean_bps": 52.1,
     "jan2021_bps": -309.7,
     "folds_beat_baseline": 0,
     "delta_sharpe": 0.0,
@@ -49,12 +49,32 @@
   },
   "mt_penalty": {
     "cumulative_trials": 30,
-    "deflated_prob_real": 0.8741,
-    "deflated_pvalue": 0.1259,
-    "annualized_sharpe": 0.8906,
-    "expected_max_sharpe_under_null": 0.03613,
+    "deflated_prob_real": 0.9885,
+    "deflated_pvalue": 0.0115,
+    "annualized_sharpe": 1.4285,
+    "expected_max_sharpe_under_null": 0.04291,
     "bar": 0.95,
-    "survives": false
+    "survives": true
+  },
+  "search_window": {
+    "start": "2018-01-01",
+    "end": null,
+    "name": "PRIMARY (>=2018)"
+  },
+  "holdout": {
+    "status": "ok",
+    "window": [
+      "2013-11-26",
+      "2017-12-31"
+    ],
+    "n_fires": 7722,
+    "oos_sharpe": 0.264,
+    "oos_mean_bps": 21.5,
+    "oos_maxdd": -0.0506,
+    "primary_sharpe": 1.437,
+    "primary_mean_bps": 52.1,
+    "same_sign_as_primary": true,
+    "confirms": true
   },
   "promoted": false,
   "verdict": "NO VALIDATED IMPROVEMENT \u2014 v22+exits is near a local optimum",
@@ -62,184 +82,184 @@
     {
       "name": "baseline_v22+6b_exits",
       "kind": "baseline",
-      "n_fires": 30535,
-      "pooled_sharpe": 1.036,
+      "n_fires": 22921,
+      "pooled_sharpe": 1.437,
       "pooled_maxdd": -0.0525,
-      "pooled_mean_bps": 44.1,
+      "pooled_mean_bps": 52.1,
       "jan2021_bps": -309.7,
-      "mean_hold_bd": 13.1
+      "mean_hold_bd": 12.7
     },
     {
       "name": "exit_hardstop_only_8",
       "kind": "exit",
-      "n_fires": 30535,
-      "pooled_sharpe": 1.113,
-      "pooled_maxdd": -0.0831,
-      "pooled_mean_bps": 57.7,
+      "n_fires": 22921,
+      "pooled_sharpe": 1.575,
+      "pooled_maxdd": -0.0688,
+      "pooled_mean_bps": 71.0,
       "jan2021_bps": -225.7,
-      "mean_hold_bd": 15.6
+      "mean_hold_bd": 15.2
     },
     {
       "name": "exit_hardstop_6",
       "kind": "exit",
-      "n_fires": 30535,
-      "pooled_sharpe": 1.1,
-      "pooled_maxdd": -0.0396,
-      "pooled_mean_bps": 38.0,
+      "n_fires": 22921,
+      "pooled_sharpe": 1.521,
+      "pooled_maxdd": -0.0382,
+      "pooled_mean_bps": 45.2,
       "jan2021_bps": -231.7,
-      "mean_hold_bd": 11.6
+      "mean_hold_bd": 11.2
     },
     {
       "name": "exit_hardstop_10",
       "kind": "exit",
-      "n_fires": 30535,
-      "pooled_sharpe": 0.961,
+      "n_fires": 22921,
+      "pooled_sharpe": 1.337,
       "pooled_maxdd": -0.0623,
-      "pooled_mean_bps": 48.0,
+      "pooled_mean_bps": 57.3,
       "jan2021_bps": -358.7,
-      "mean_hold_bd": 14.2
+      "mean_hold_bd": 13.8
     },
     {
       "name": "exit_boll_band_only",
       "kind": "exit",
-      "n_fires": 30535,
-      "pooled_sharpe": 0.365,
+      "n_fires": 22921,
+      "pooled_sharpe": 0.405,
       "pooled_maxdd": -0.2775,
-      "pooled_mean_bps": 57.5,
+      "pooled_mean_bps": 65.2,
       "jan2021_bps": -806.0,
-      "mean_hold_bd": 18.2
+      "mean_hold_bd": 18.1
     },
     {
       "name": "exit_hardstop_boll_mean",
       "kind": "exit",
-      "n_fires": 30535,
-      "pooled_sharpe": 0.494,
-      "pooled_maxdd": -0.0673,
-      "pooled_mean_bps": 5.1,
+      "n_fires": 22921,
+      "pooled_sharpe": 0.87,
+      "pooled_maxdd": -0.0537,
+      "pooled_mean_bps": 7.6,
       "jan2021_bps": -176.1,
-      "mean_hold_bd": 9.2
+      "mean_hold_bd": 8.9
     },
     {
       "name": "exit_trailing_boll",
       "kind": "exit",
-      "n_fires": 30535,
-      "pooled_sharpe": 0.751,
-      "pooled_maxdd": -0.05,
-      "pooled_mean_bps": 23.1,
+      "n_fires": 22921,
+      "pooled_sharpe": 1.067,
+      "pooled_maxdd": -0.0452,
+      "pooled_mean_bps": 25.2,
       "jan2021_bps": -247.7,
-      "mean_hold_bd": 11.3
+      "mean_hold_bd": 10.7
     },
     {
       "name": "exit_base_plus_vol",
       "kind": "exit",
-      "n_fires": 30535,
-      "pooled_sharpe": 0.955,
+      "n_fires": 22921,
+      "pooled_sharpe": 1.298,
       "pooled_maxdd": -0.0468,
-      "pooled_mean_bps": 32.1,
+      "pooled_mean_bps": 35.1,
       "jan2021_bps": -198.1,
-      "mean_hold_bd": 11.6
+      "mean_hold_bd": 11.0
     },
     {
       "name": "exit_base_plus_squeeze",
       "kind": "exit",
-      "n_fires": 30535,
-      "pooled_sharpe": 0.936,
+      "n_fires": 22921,
+      "pooled_sharpe": 1.296,
       "pooled_maxdd": -0.0592,
-      "pooled_mean_bps": 44.1,
+      "pooled_mean_bps": 51.5,
       "jan2021_bps": -164.2,
-      "mean_hold_bd": 12.1
+      "mean_hold_bd": 11.6
     },
     {
       "name": "exit_base_plus_tail",
       "kind": "exit",
-      "n_fires": 30535,
-      "pooled_sharpe": 0.907,
+      "n_fires": 22921,
+      "pooled_sharpe": 1.219,
       "pooled_maxdd": -0.0513,
-      "pooled_mean_bps": 30.6,
+      "pooled_mean_bps": 33.1,
       "jan2021_bps": -101.7,
-      "mean_hold_bd": 10.9
+      "mean_hold_bd": 10.3
     },
     {
       "name": "exit_hardstop_profit",
       "kind": "exit",
-      "n_fires": 30535,
-      "pooled_sharpe": 0.889,
-      "pooled_maxdd": -0.0574,
-      "pooled_mean_bps": 34.5,
+      "n_fires": 22921,
+      "pooled_sharpe": 1.223,
+      "pooled_maxdd": -0.0567,
+      "pooled_mean_bps": 37.8,
       "jan2021_bps": -377.1,
-      "mean_hold_bd": 13.8
+      "mean_hold_bd": 13.2
     },
     {
       "name": "exit_hardstop_5_tight",
       "kind": "exit",
-      "n_fires": 30535,
-      "pooled_sharpe": 1.229,
-      "pooled_maxdd": -0.0413,
-      "pooled_mean_bps": 36.4,
+      "n_fires": 22921,
+      "pooled_sharpe": 1.677,
+      "pooled_maxdd": -0.0322,
+      "pooled_mean_bps": 42.1,
       "jan2021_bps": -153.2,
-      "mean_hold_bd": 10.6
+      "mean_hold_bd": 10.2
     },
     {
       "name": "universe_liquid_5",
       "kind": "universe",
-      "n_fires": 27607,
-      "pooled_sharpe": 0.97,
+      "n_fires": 20480,
+      "pooled_sharpe": 1.234,
       "pooled_maxdd": -0.056,
-      "pooled_mean_bps": 43.3,
+      "pooled_mean_bps": 48.3,
       "jan2021_bps": -256.7,
-      "mean_hold_bd": 13.5
+      "mean_hold_bd": 13.1
     },
     {
       "name": "universe_liquid_10",
       "kind": "universe",
-      "n_fires": 24407,
-      "pooled_sharpe": 0.866,
+      "n_fires": 18086,
+      "pooled_sharpe": 1.039,
       "pooled_maxdd": -0.0726,
-      "pooled_mean_bps": 45.8,
+      "pooled_mean_bps": 48.5,
       "jan2021_bps": -279.9,
-      "mean_hold_bd": 13.8
+      "mean_hold_bd": 13.4
     },
     {
       "name": "entry_corner_70_30",
       "kind": "entry",
-      "n_fires": 36966,
-      "pooled_sharpe": 0.863,
-      "pooled_maxdd": -0.0566,
-      "pooled_mean_bps": 37.7,
+      "n_fires": 27810,
+      "pooled_sharpe": 1.201,
+      "pooled_maxdd": -0.0522,
+      "pooled_mean_bps": 44.6,
       "jan2021_bps": -349.3,
-      "mean_hold_bd": 13.2
+      "mean_hold_bd": 12.8
     },
     {
       "name": "entry_corner_80_20",
       "kind": "entry",
-      "n_fires": 23996,
-      "pooled_sharpe": 1.124,
-      "pooled_maxdd": -0.0643,
-      "pooled_mean_bps": 51.7,
+      "n_fires": 18006,
+      "pooled_sharpe": 1.565,
+      "pooled_maxdd": -0.0598,
+      "pooled_mean_bps": 60.5,
       "jan2021_bps": -171.2,
-      "mean_hold_bd": 12.9
+      "mean_hold_bd": 12.5
     },
     {
       "name": "entry_freshness_5",
       "kind": "entry",
-      "n_fires": 36959,
-      "pooled_sharpe": 1.064,
+      "n_fires": 27809,
+      "pooled_sharpe": 1.336,
       "pooled_maxdd": -0.0521,
-      "pooled_mean_bps": 42.6,
+      "pooled_mean_bps": 47.7,
       "jan2021_bps": -316.4,
-      "mean_hold_bd": 13.3
+      "mean_hold_bd": 12.9
     },
     {
       "name": "entry_sigma_1_5",
       "kind": "entry",
-      "n_fires": 29402,
-      "pooled_sharpe": 0.944,
+      "n_fires": 22081,
+      "pooled_sharpe": 1.329,
       "pooled_maxdd": -0.0567,
-      "pooled_mean_bps": 41.2,
+      "pooled_mean_bps": 49.5,
       "jan2021_bps": -394.2,
-      "mean_hold_bd": 13.1
+      "mean_hold_bd": 12.7
     }
   ],
-  "runtime_s": 87.6,
-  "updated_at": "2026-05-26T04:24:57+00:00"
+  "runtime_s": 123.1,
+  "updated_at": "2026-05-28T14:12:04+00:00"
 }

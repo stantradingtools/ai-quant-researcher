@@ -1,40 +1,43 @@
 ================================================================================================
 MUTATION AGENT (#11) — drawdown-constrained, MT-disciplined alpha optimiser (thesis-locked)
 ================================================================================================
-sample 600 tickers (30,535 baseline fires) | 5 walk-forward folds from 2014-01-01 | DD bound -0.25 | cost 20bps | 87.6s
+sample 600 tickers (22,921 baseline fires) | 5 walk-forward folds from 2018-01-01 | DD bound -0.25 | cost 20bps | 123.1s
 search space: 11 exit (cheap) + 2 universe + 4 entry (expensive) = 18 candidates this run
 cumulative trials (MT count): 12 (6b) + 18 = 30
 
-baseline (v22 + 6b exits): Sharpe 1.036 | maxDD -0.0525 | mean 44.1bps | 2021-01 -309.7bps
+baseline (v22 + 6b exits): Sharpe 1.437 | maxDD -0.0525 | mean 52.1bps | 2021-01 -309.7bps
 best variant: baseline_v22+6b_exits (baseline)
-  Sharpe 1.036 (Δ+0.0) | maxDD -0.0525 (Δ+0.0) | mean 44.1bps | folds beating baseline 0/5
+  Sharpe 1.437 (Δ+0.0) | maxDD -0.0525 (Δ+0.0) | mean 52.1bps | folds beating baseline 0/5
 
 -- MULTIPLE-TESTING / DSR PENALTY ------------------------------------------------------------
-  cumulative trials n=30 -> expected max Sharpe under null 0.03613
-  best variant annualized Sharpe 0.8906 -> deflated prob-real 0.8741 (bar 0.95) | survives MT: False
+  cumulative trials n=30 -> expected max Sharpe under null 0.04291
+  best variant annualized Sharpe 1.4285 -> deflated prob-real 0.9885 (bar 0.95) | survives MT: True
+
+-- PRE-2018 LEAK-GUARD (search held out the pre-2018 OOS) -------------------------------------
+  pre-2018 OOS (2013-11-26..2017-12-31): n_fires 7,722 | Sharpe 0.264 | mean 21.5bps | maxDD -0.0506 | same-sign True | CONFIRMS True
 
 VERDICT: NO VALIDATED IMPROVEMENT — v22+exits is near a local optimum
 
 -- ALL CANDIDATES (logged; feeds the cumulative MT count) ------------------------------------
   candidate                   |     kind|  fires| Sharpe|   maxDD| mean bps|  2021-01
-  baseline_v22+6b_exits       | baseline| 30,535|  1.036| -0.0525|     44.1|   -309.7
-  exit_hardstop_only_8        |     exit| 30,535|  1.113| -0.0831|     57.7|   -225.7
-  exit_hardstop_6             |     exit| 30,535|    1.1| -0.0396|     38.0|   -231.7
-  exit_hardstop_10            |     exit| 30,535|  0.961| -0.0623|     48.0|   -358.7
-  exit_boll_band_only         |     exit| 30,535|  0.365| -0.2775|     57.5|   -806.0
-  exit_hardstop_boll_mean     |     exit| 30,535|  0.494| -0.0673|      5.1|   -176.1
-  exit_trailing_boll          |     exit| 30,535|  0.751|   -0.05|     23.1|   -247.7
-  exit_base_plus_vol          |     exit| 30,535|  0.955| -0.0468|     32.1|   -198.1
-  exit_base_plus_squeeze      |     exit| 30,535|  0.936| -0.0592|     44.1|   -164.2
-  exit_base_plus_tail         |     exit| 30,535|  0.907| -0.0513|     30.6|   -101.7
-  exit_hardstop_profit        |     exit| 30,535|  0.889| -0.0574|     34.5|   -377.1
-  exit_hardstop_5_tight       |     exit| 30,535|  1.229| -0.0413|     36.4|   -153.2
-  universe_liquid_5           | universe| 27,607|   0.97|  -0.056|     43.3|   -256.7
-  universe_liquid_10          | universe| 24,407|  0.866| -0.0726|     45.8|   -279.9
-  entry_corner_70_30          |    entry| 36,966|  0.863| -0.0566|     37.7|   -349.3
-  entry_corner_80_20          |    entry| 23,996|  1.124| -0.0643|     51.7|   -171.2
-  entry_freshness_5           |    entry| 36,959|  1.064| -0.0521|     42.6|   -316.4
-  entry_sigma_1_5             |    entry| 29,402|  0.944| -0.0567|     41.2|   -394.2
+  baseline_v22+6b_exits       | baseline| 22,921|  1.437| -0.0525|     52.1|   -309.7
+  exit_hardstop_only_8        |     exit| 22,921|  1.575| -0.0688|     71.0|   -225.7
+  exit_hardstop_6             |     exit| 22,921|  1.521| -0.0382|     45.2|   -231.7
+  exit_hardstop_10            |     exit| 22,921|  1.337| -0.0623|     57.3|   -358.7
+  exit_boll_band_only         |     exit| 22,921|  0.405| -0.2775|     65.2|   -806.0
+  exit_hardstop_boll_mean     |     exit| 22,921|   0.87| -0.0537|      7.6|   -176.1
+  exit_trailing_boll          |     exit| 22,921|  1.067| -0.0452|     25.2|   -247.7
+  exit_base_plus_vol          |     exit| 22,921|  1.298| -0.0468|     35.1|   -198.1
+  exit_base_plus_squeeze      |     exit| 22,921|  1.296| -0.0592|     51.5|   -164.2
+  exit_base_plus_tail         |     exit| 22,921|  1.219| -0.0513|     33.1|   -101.7
+  exit_hardstop_profit        |     exit| 22,921|  1.223| -0.0567|     37.8|   -377.1
+  exit_hardstop_5_tight       |     exit| 22,921|  1.677| -0.0322|     42.1|   -153.2
+  universe_liquid_5           | universe| 20,480|  1.234|  -0.056|     48.3|   -256.7
+  universe_liquid_10          | universe| 18,086|  1.039| -0.0726|     48.5|   -279.9
+  entry_corner_70_30          |    entry| 27,810|  1.201| -0.0522|     44.6|   -349.3
+  entry_corner_80_20          |    entry| 18,006|  1.565| -0.0598|     60.5|   -171.2
+  entry_freshness_5           |    entry| 27,809|  1.336| -0.0521|     47.7|   -316.4
+  entry_sigma_1_5             |    entry| 22,081|  1.329| -0.0567|     49.5|   -394.2
 
 READOUT:
   - Promote ONLY a walk-forward improvement (beats baseline Sharpe on a majority of folds,
