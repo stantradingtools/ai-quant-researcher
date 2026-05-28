@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"/>
+<title>Skew-Consensus Validation System — Extended Companion Report</title>
+<style>
+@page { size: a4; margin: 1.55cm 1.3cm 1.7cm 1.3cm;
+  @frame footer_frame { -pdf-frame-content: footerContent; bottom: 0.7cm; margin-left: 1.3cm; margin-right: 1.3cm; height: 1cm; } }
+body { font-family: Arial, "DejaVu Sans", sans-serif; font-size: 10pt; color: #1a2332; line-height: 1.42; }
+h1 { font-size: 19pt; color: #16284d; page-break-before: always; border-bottom: 2pt solid #16284d; padding-bottom: 3pt; margin: 0 0 9pt 0; }
+h1.first { page-break-before: avoid; }
+h2 { font-size: 13.5pt; color: #16284d; margin: 15pt 0 5pt 0; border-bottom: 0.75pt solid #c9d3e0; padding-bottom: 2pt; }
+h3 { font-size: 11pt; color: #1f3a5f; margin: 10pt 0 3pt 0; }
+p { margin: 4pt 0; }
+table { border-collapse: collapse; width: 100%; margin: 6pt 0 8pt 0; }
+th { background-color: #16284d; color: #fff; text-align: left; padding: 4pt 6pt; font-size: 8.3pt; }
+td { border: 0.5pt solid #c9d3e0; padding: 3pt 6pt; font-size: 8.3pt; vertical-align: top; }
+tr:nth-child(even) td { background-color: #f4f6f9; }
+.fig { margin: 7pt 0 3pt 0; page-break-inside: avoid; }
+.fig img { width: 17.5cm; }
+.np { page-break-before: always; }
+.cap { font-size: 8pt; color: #455a72; font-style: italic; margin-bottom: 8pt; }
+code { font-family: "Courier New", monospace; background-color: #eef0f5; font-size: 8.6pt; padding: 0 1pt; }
+ul, ol { margin: 4pt 0 6pt 0; }
+li { margin: 2pt 0; font-size: 9.3pt; }
+.lead { color: #455a72; font-size: 10.5pt; }
+.box { border: 0.75pt solid #c9d3e0; border-left: 3pt solid #0072c6; background-color: #f4f6f9; padding: 6pt 9pt; margin: 7pt 0; }
+.box.warn { border-left-color: #b85c00; }
+.box.good { border-left-color: #0a7a3c; }
+.box.bad { border-left-color: #c80030; }
+.kpi td { text-align: center; font-size: 9pt; }
+.kpi .v { font-size: 14pt; font-weight: bold; color: #16284d; }
+.kpi th { text-align: center; }
+.small { font-size: 8.5pt; color: #455a72; }
+.tag { font-size: 7.5pt; font-weight: bold; color: #fff; background-color: #6b3fbf; padding: 1pt 4pt; border-radius: 3pt; }
+.mono { font-family: "Courier New", monospace; font-size: 8.4pt; }
+#footerContent { font-size: 7.5pt; color: #8a9bb0; text-align: center; }
+.cover { text-align: center; padding-top: 5.5cm; }
+.cover .t { font-size: 30pt; color: #16284d; font-weight: bold; line-height: 1.1; }
+.cover .s { font-size: 13pt; color: #0072c6; margin-top: 14pt; }
+.cover .m { font-size: 10pt; color: #455a72; margin-top: 32pt; line-height: 1.7; }
+.rule { border-top: 2pt solid #0072c6; width: 40%; margin: 18pt auto; }
+</style></head>
+<body>
+<div id="footerContent">Skew-Consensus Validation System — Extended Companion Report · Confidential · page <pdf:pagenumber/></div>
+
+<!-- ===================== COVER ===================== -->
+<div class="cover">
+  <div class="t">The Skew-Consensus<br/>Validation System</div>
+  <div class="rule"></div>
+  <div class="s">An Extended, Code-Backed Companion:<br/>Agents, Workflows, and the Path from Hypothesis to Live Paper Trading</div>
+  <div class="m">
+    Companion to <b>Project Record v2.2</b> &nbsp;·&nbsp; expands every agent, every condition, every handoff<br/>
+    Twelve agents · ten-stage validation pipeline · two-agent optimisation layer · enforced paper trading<br/>
+    Strategy of record: <b>skew_consensus_v22_novix</b> &nbsp;·&nbsp; ~454,798 fires, 2013–2026, survivorship-free<br/><br/>
+    Prepared May 2026 &nbsp;·&nbsp; branch <span class="mono">claude/funny-elbakyan-1e8456</span><br/>
+    <b>Confidential working document</b>
+  </div>
+</div>
+
+<!-- ===================== TOC ===================== -->
+<h1>Contents</h1>
+<table>
+<tr><th style="width:62%">Section</th><th>Figures &amp; charts</th></tr>
+<tr><td><b>Part I — Orientation</b></td><td></td></tr>
+<tr><td>1. How to read this document · executive summary</td><td>KPI strip</td></tr>
+<tr><td>2. The big picture — three operating regimes</td><td>Figure 1 (master pipeline)</td></tr>
+<tr><td>3. The strategy in one page — the skew-consensus fade</td><td>—</td></tr>
+<tr><td>3b. Design philosophy &amp; the anti-overfitting doctrine</td><td>—</td></tr>
+<tr><td><b>Part II — The agent system</b></td><td></td></tr>
+<tr><td>4. The agent roster</td><td>—</td></tr>
+<tr><td>5. Artifact data-flow &amp; the audit trail</td><td>Figure 2</td></tr>
+<tr><td>6. Mode A vs Mode B</td><td>Figure 3</td></tr>
+<tr><td>7. Orchestration: eleven steps, checkpoints, overrides</td><td>—</td></tr>
+<tr><td><b>Part III — Agent deep dives</b></td><td></td></tr>
+<tr><td>8. Agent 1 — Hypothesis-Refiner</td><td>—</td></tr>
+<tr><td>9. Agent 2 — Pre-Critic (four market templates)</td><td>—</td></tr>
+<tr><td>10. Agent 3 — Coder &amp; the execution sandbox</td><td>—</td></tr>
+<tr><td>11. The signal it builds — M1 ∧ M2 ∧ M3</td><td>Figure 4</td></tr>
+<tr><td>12. Agent 4 — Backtest (fires → verdict)</td><td>Figure 5</td></tr>
+<tr><td>13. The vs-random verdict engine</td><td>Figure 6 · Chart 4</td></tr>
+<tr><td>14. Agent 5 — Statistics &amp; the Deflated Sharpe</td><td>—</td></tr>
+<tr><td>15. Agent 6 — Vs-Random gate</td><td>—</td></tr>
+<tr><td>16. Agent 7 — Validator (nine criteria)</td><td>—</td></tr>
+<tr><td>17. Agent 8 — Gatekeeper (statistical gate stack)</td><td>Figure 7</td></tr>
+<tr><td>18. Agent 9 — Risk &amp; the sizing engine</td><td>Figure 8</td></tr>
+<tr><td>19. Agent 10 — Memory &amp; Reporter</td><td>—</td></tr>
+<tr><td><b>Part IV — The optimisation layer</b></td><td></td></tr>
+<tr><td>20. Agent 11 — Mutation (constrained optimiser)</td><td>Figure 9 · Charts 6–7</td></tr>
+<tr><td>21. Agent 12 — Exit (technical-analysis exits)</td><td>Charts 8</td></tr>
+<tr><td><b>Part V — Backtest fidelity</b></td><td></td></tr>
+<tr><td>22. The path-dependent engine</td><td>—</td></tr>
+<tr><td>23. Parity discipline</td><td>Figure 10</td></tr>
+<tr><td>23b. The backtest-realism ladder</td><td>—</td></tr>
+<tr><td><b>Part VI — From idea to live</b></td><td></td></tr>
+<tr><td>24. The data layer</td><td>—</td></tr>
+<tr><td>25. Paper-trading execution</td><td>Figure 11</td></tr>
+<tr><td>26. End-to-end walkthrough — a worked lifecycle</td><td>Figure 12</td></tr>
+<tr><td><b>Part VII — Results &amp; appendices</b></td><td></td></tr>
+<tr><td>27. Results gallery &amp; the honest read</td><td>Charts 1–3, 5, 9</td></tr>
+<tr><td>27b. Limitations, failure modes &amp; roadmap</td><td>—</td></tr>
+<tr><td>27c. Incubating your own thesis — a practical guide</td><td>—</td></tr>
+<tr><td>28. Glossary · 29. Constants quick-reference · 30. Audit-trail map</td><td>—</td></tr>
+</table>
+
+<!-- ===================== PART I ===================== -->
+<h1>Part I — Orientation</h1>
+<h2>1. How to read this document</h2>
+<p class="lead">This is the engineering companion to the one-page Project Record. Where the Record states <i>what</i> the system achieved, this document explains <i>how</i> — agent by agent, condition by condition — and every numeric threshold, rule, and handoff below is taken directly from the code (file names are cited; code itself is not reproduced).</p>
+<p>The system answers three questions in sequence, each handled by a distinct group of agents:</p>
+<ol>
+<li><b>Is this trading idea real?</b> — a ten-stage validation pipeline (agents 1–10) that turns a prose thesis into a gated, statistically-defended verdict.</li>
+<li><b>Can we make it better without fooling ourselves?</b> — a two-agent optimisation layer (agents 11–12) that searches the tunable surface under hard anti-overfitting governors.</li>
+<li><b>Will it survive contact with a real broker?</b> — an enforced paper-trading loop (Phase 4) on a live options-data feed, with a live transition (Phase 5) gated on an accrued track record.</li>
+</ol>
+<div class="box"><b>Executive summary.</b> A prose hypothesis is formalised, adversarially screened, coded into a signal, and back-tested against a date- and direction-matched random pool. It then passes deflated-Sharpe, correlation and concentration gates, a nine-criterion qualitative review, and a risk-and-sizing officer, before being recorded and rendered into a living report. The strategy of record — a skew/IV/risk-reversal <i>fade</i> on US equities — clears every gate (21-day selection increment <b>+18.15&nbsp;bps</b>, <b>z&nbsp;8.87</b>), sizes to a <b>1.12 Sharpe / −9.86% max drawdown</b> book, and is deployed at <b>0.5×</b> to enforced Alpaca paper trading. The optimisation layer searched 18 variants and — correctly — promoted none: the deflated probability-of-real fell to <b>0.874&nbsp;&lt;&nbsp;0.95</b> at 30 cumulative trials, so the guardrails refused to ship an overfit. The edge is real, robust, and economically modest, with one known regime weakness (a sharp V-recovery runs over the fade).</div>
+
+<table class="kpi">
+<tr><th>21d increment</th><th>21d gross</th><th>z-score</th><th>Sharpe (sized)</th><th>Max drawdown</th><th>Deploy size</th></tr>
+<tr><td class="v">+18.15 bps</td><td class="v">+106.96 bps</td><td class="v">8.87</td><td class="v">1.12</td><td class="v">−9.86%</td><td class="v">0.5×</td></tr>
+<tr><td class="small">vs random pool</td><td class="small">per 21d trade</td><td class="small">p &lt; 0.0005</td><td class="small">CAGR +5.82%</td><td class="small">every year +</td><td class="small">Risk Agent 4/10</td></tr>
+</table>
+
+<h2>2. The big picture — three operating regimes</h2>
+<p>The system is one linear pipeline wrapped by two loops. The <b>linear pipeline</b> (stages 1→10) is the validator. The <b>optimisation loop</b> (agents 11–12) wraps it at design time: a promoted variant re-enters at stage 3→4 and clears the whole gate stack again. The <b>paper loop</b> (Phase 4) runs forward daily on a live feed once a strategy is validated and sized.</p>
+<div class="fig"><img src="report_assets/fig01_master.png"/></div>
+<div class="cap">Figure 1 — The master pipeline. Purple = LLM-judgment agents; blue = deterministic modules; amber = the optimisation layer; green = live execution. Stages 1–10 validate; agents 11–12 optimise under governors; Phase 4 trades on paper; Phase 5 (live) is gated on a paper track record.</div>
+<p><b>Deterministic maths, LLM judgment.</b> The division of labour is deliberate: anything that must be reproducible and defensible (the signal, the backtest, the statistics, the gates, the sizing) is <b>deterministic Python</b>; anything requiring judgment under ambiguity (formalising a thesis, killing a bad idea, qualitative review, risk sign-off) is an <b>LLM agent</b> with a tightly-scoped rubric. Twelve agents in total: six LLM agents, the deterministic backtest/stats/gates modules, and the two optimisation agents.</p>
+
+<h2>3. The strategy in one page — the skew-consensus fade</h2>
+<p>The strategy reads the <b>ORATS options surface</b> to detect crowded extremes and <b>fades</b> them, trading the <b>underlying equity</b> (options inform direction only, so the traded instrument is equities). It fires when three independent readings of the surface agree:</p>
+<ul>
+<li><b>M1 (corner):</b> the put/call percentile corner is extreme — a call-rich corner (<code>putP≤25 &amp; callP≥75</code>) signals euphoria → short; the mirror signals capitulation → long.</li>
+<li><b>M2 (vol + skew):</b> implied-vol percentile is high (<code>ivP≥75</code>) and the risk-reversal percentile is at an extreme.</li>
+<li><b>M3 (exhaustion):</b> a sigma-stall (a flat, persistently-extreme move) <i>or</i> a skew-divergence (a one-sided skew that just turned) confirms the move is exhausting.</li>
+</ul>
+<p>A <b>BULL</b> reading carries <code>signal_sign = −1</code> — it profits if price <i>falls</i> (the fade). A <b>BEAR</b> reading carries <code>+1</code>. The position is held 21 trading days unless an exit rule fires earlier. Filters: an earnings blackout and a short-trend filter are kept (tail control); a VIX filter was removed (it destroyed alpha).</p>
+<table>
+<tr><th style="width:34%">Property</th><th>Value (code-backed)</th></tr>
+<tr><td>Signal inputs</td><td><code>putP, callP, ivP, rrP, sigma, skewDelta</code> (0–100 percentiles + two raw series)</td></tr>
+<tr><td>Combination</td><td>M1 ∧ M2 ∧ M3, freshness-3, thresholds hi/lo = 75/25, sigma_threshold = 1.0</td></tr>
+<tr><td>Direction</td><td>BULL → −1 (short fade); BEAR → +1 (long fade)</td></tr>
+<tr><td>Hold / exit</td><td>21 trading days, with OOS-validated early exits (hard_stop 8% + Bollinger reversion band)</td></tr>
+<tr><td>Universe</td><td>Survivorship-free US equities (active + delisted); ~8,519 tickers in the clean panel</td></tr>
+<tr><td>Validation edge (21d)</td><td>+18.15 bps selection increment, +106.96 bps gross, z 8.87, p &lt; 0.0005, beat-rate 51.6%</td></tr>
+<tr><td>Sized book</td><td>Sharpe 1.12, CAGR +5.82%, max drawdown −9.86%, worst month 2020-02 −7.20%</td></tr>
+<tr><td>Known weakness</td><td>A sharp V-shaped recovery runs over the fade (e.g. the 2020 rebound)</td></tr>
+</table>
+
+<h2 class="np">3b. Design philosophy &amp; the anti-overfitting doctrine</h2>
+<p>The single hardest problem in systematic research is not finding a backtest that looks good — it is <i>not being fooled</i> by one. Every design choice in this system serves that goal. Two principles organise everything:</p>
+<ol>
+<li><b>Deterministic maths, LLM judgment.</b> Anything that must be reproducible and defensible — the signal, the backtest, the statistics, the gates, the sizing — is plain, version-controlled Python whose output is byte-stable. Anything that needs judgment under ambiguity — formalising a thesis, killing a bad idea, qualitative review, risk sign-off — is an LLM agent with a narrow, written rubric. The LLM never computes a number that ends up in a verdict; the maths never makes a judgment call.</li>
+<li><b>The guardrails are the product.</b> A loop that “keeps trying until the metric improves” is, unconstrained, an overfitting machine. The system’s value is the set of mechanisms that let it search hard while refusing to deceive itself. Those mechanisms are layered, so a flaw that slips one is caught by another.</li>
+</ol>
+<p>The seven defenses, each mapped to the trap it closes and the code that enforces it:</p>
+<table>
+<tr><th>Overfitting / self-deception trap</th><th>Defense</th><th>Enforced in</th></tr>
+<tr><td>“My code silently differs from the idea I validated.”</td><td>Fire-parity gate — stored side must equal the reference recompute, tol 0, or scoring is refused.</td><td><code>parity_gate.py</code> + <code>backtest.run</code></td></tr>
+<tr><td>“The market just drifted; my ‘edge’ is beta.”</td><td>Date- &amp; direction-matched random pool — the null is a random name on the same day, same direction.</td><td><code>signal_vs_random.run_test</code></td></tr>
+<tr><td>“I tried 100 variants and kept the best-looking number.”</td><td>Deflated Sharpe with an honest, <i>cumulative</i> trial count from the memory store.</td><td><code>stats.deflated_sharpe</code> + <code>memory.n_trials</code></td></tr>
+<tr><td>“It only works on the data I tuned it on.”</td><td>Walk-forward folds + a held-out test; the optimiser never sees the holdout during search.</td><td><code>exit_agent.select_rules</code>, <code>mutation_agent._wf_score</code></td></tr>
+<tr><td>“A penny-stock fluke (+49900%) carries the result.”</td><td>Eligibility screen: $1 price floor, |forward return| ≤ 5.0, applied exactly once.</td><td><code>run_test</code> screen</td></tr>
+<tr><td>“It’s a closet duplicate of a strategy I already run.”</td><td>Correlation gate vs accepted survivors (&lt; 0.60) + PCA concentration (&lt; 0.50).</td><td><code>gates.py</code></td></tr>
+<tr><td>“A single bad month wipes the book.”</td><td>Drawdown kill-switch (−15% → ×0.3) + fractional-Kelly caps + a hard maximum-drawdown bound on every mutation.</td><td><code>sizing.py</code>, <code>mutation_agent.optimise</code></td></tr>
+</table>
+<div class="box good"><b>Why “no improvement” is the headline proof.</b> The clearest evidence the guardrails work is that the optimisation layer — explicitly tasked with finding something better — searched 18 variants and promoted <b>none</b>, because the multiple-testing penalty correctly deflated the best candidate below the bar. A system that always “finds” an improvement is broken; this one knew when to stop.</div>
+
+<!-- ===================== PART II ===================== -->
+<h1>Part II — The agent system</h1>
+<h2>4. The agent roster</h2>
+<p>Twelve agents, classified by whether they exercise judgment (LLM) or compute a deterministic result. The six LLM agents are defined in <code>.claude/agents/*.md</code> (name, role, allowed tools); the deterministic stages are Python modules under <code>quant_validator/</code>.</p>
+<table>
+<tr><th>#</th><th>Agent / stage</th><th>Type</th><th>Reads</th><th>Writes</th><th>Role in one line</th></tr>
+<tr><td>1</td><td>Hypothesis-Refiner</td><td><span class="tag">LLM</span></td><td>thesis.md</td><td>refined.json</td><td>Prose → JSON spec; stress-test; never invents</td></tr>
+<tr><td>2</td><td>Pre-Critic</td><td><span class="tag">LLM</span></td><td>refined.json</td><td>critique_pre.json</td><td>Adversarial kill gate, per-market templates</td></tr>
+<tr><td>3</td><td>Coder</td><td><span class="tag">LLM</span></td><td>refined.json</td><td>code/signal.py</td><td>Spec → one runnable <code>strategy()</code></td></tr>
+<tr><td>4</td><td>Backtest</td><td>det.</td><td>signal.py, panel</td><td>vs_random.json + 3 csv</td><td>Fires-frame → verdict via random-pool test</td></tr>
+<tr><td>5</td><td>Statistics</td><td>det.</td><td>returns.csv</td><td>metrics, dsr,<br/>walk_forward</td><td>Sharpe, DSR, walk-forward, regime, tail</td></tr>
+<tr><td>6</td><td>Vs-Random</td><td>det.</td><td>annotated panel</td><td>vs_random.json</td><td>Tier-A permutation floor + Tier-B search</td></tr>
+<tr><td>7</td><td>Validator</td><td><span class="tag">LLM</span></td><td>all results/*</td><td>critique_post.json</td><td>Nine-criteria qualitative review</td></tr>
+<tr><td>8</td><td>Gatekeeper</td><td>det.</td><td>dsr/positions/corr</td><td>gates_outcome.json</td><td>DSR / correlation / PCA / vs-random gates</td></tr>
+<tr><td>9</td><td>Risk</td><td><span class="tag">LLM</span></td><td>positions/returns/greeks</td><td>risk.json</td><td>Risk score 0–10 + size recommendation</td></tr>
+<tr><td>10</td><td>Memory &amp; Reporter</td><td><span class="tag">LLM</span>+det.</td><td>decision.json</td><td>memory.db + report.html</td><td>Logs every trial; renders the living report</td></tr>
+<tr><td>11</td><td>Mutation</td><td>det.</td><td>validated strategy</td><td>mutation_agent.json</td><td>DD-bounded, MT-disciplined optimiser</td></tr>
+<tr><td>12</td><td>Exit</td><td>det.</td><td>fires + OHLC</td><td>exit_selection.json</td><td>Sign-aware exit-rule finder + ranker</td></tr>
+</table>
+<p class="small">All six LLM-agent definitions carry only <code>name</code>, <code>description</code> and an allowed-<code>tools</code> list (Read/Write/Bash/Grep as appropriate); none pins a specific model. The “Reporter” is implemented as a Skill (<code>report-rendering</code>), invoked at stage 10, not as a separate agent file.</p>
+
+<h2>5. Artifact data-flow &amp; the audit trail</h2>
+<p>Every stage reads named artifacts and writes named artifacts under <code>theses/&lt;id&gt;/</code>. Nothing is implicit: the full chain is on disk and append-only.</p>
+<div class="fig"><img src="report_assets/fig02_dataflow.png"/></div>
+<div class="cap">Figure 2 — The artifact data-flow. Each stage’s output is the next stage’s input; every write is mirrored into <code>audit_log.jsonl</code> and a human-readable <code>step_summaries/NN_*.md</code>.</div>
+<p>The per-thesis file set: <code>thesis.md, refined.json, critique_pre.json, code/signal.py, results/{vs_random,metrics,walk_forward,dsr}.json + returns/positions/equity_curve.csv, critique_post.json, gates_outcome.json, risk.json, decision.json, audit_log.jsonl, user_interactions.jsonl</code>, and <code>step_summaries/01–11*.md</code>. Every user decision (a pause answer, an override) is logged to <code>user_interactions.jsonl</code>.</p>
+
+<h2>6. Mode A vs Mode B</h2>
+<p>The orchestrator auto-detects the entry mode at Step 0: if <code>results/positions.csv</code> already exists, the thesis arrives <i>with</i> results (<b>Mode B</b>, validate existing numbers); otherwise it is built from prose (<b>Mode A</b>, generate code + backtest). The skew strategy is the Mode-A regression case.</p>
+<div class="fig"><img src="report_assets/fig03_modeab.png"/></div>
+<div class="cap">Figure 3 — Mode detection. Mode A runs the full from-prose path (refine → critique → code → backtest → …); Mode B skips code generation and validates supplied results, with Tier-B vs-random recorded as not-available.</div>
+<table>
+<tr><th>Dimension</th><th>Mode A (from prose)</th><th>Mode B (from results)</th></tr>
+<tr><td>Trigger</td><td>no <code>positions.csv</code></td><td><code>positions.csv</code> present</td></tr>
+<tr><td>Stages 1–2</td><td>refine + pre-critic</td><td>refine + pre-critic</td></tr>
+<tr><td>Stage 3–4</td><td>Coder writes <code>strategy()</code>, Backtest runs it</td><td>skipped; supplied results verified to exist</td></tr>
+<tr><td>Tier-B vs-random</td><td>constraint-matched rule search runs</td><td>recorded <code>"not_available"</code></td></tr>
+<tr><td>Stages 6–11</td><td>full</td><td>full (on supplied numbers)</td></tr>
+</table>
+
+<h2>7. Orchestration — eleven steps, checkpoints, overrides</h2>
+<p>The <code>/validate-thesis</code> command drives the pipeline. After <i>every</i> step it prints a structured summary and appends JSON to <code>audit_log.jsonl</code>. Soft rejections halt but can be overridden with a logged justification; hard errors (sandbox/missing-data) cannot.</p>
+<table>
+<tr><th>Step</th><th>What runs</th><th>Checkpoint / default on <code>--no-pause</code></th></tr>
+<tr><td>0</td><td>Locate/create thesis dir; detect Mode A/B</td><td>—</td></tr>
+<tr><td>1</td><td>Hypothesis-Refiner</td><td>if <code>mode==ASK_USER</code>, ask single vs cross-sectional</td></tr>
+<tr><td>2</td><td>Pre-Critic</td><td>on <code>kill</code> → override (<code>critic_pre</code>) or stop</td></tr>
+<tr><td>3</td><td>Data fetch (Mode A)</td><td><i>NotSubscribed</i> adapter → ask skip/abort; default <b>abort</b></td></tr>
+<tr><td>4</td><td>Coder</td><td>fire-parity fail → retry/manual/abort; default <b>abort</b></td></tr>
+<tr><td>5</td><td>Backtest (A) / verify files (B)</td><td>missing results → abort naming the file</td></tr>
+<tr><td>6</td><td>Statistics (DSR with memory’s n_trials)</td><td>—</td></tr>
+<tr><td>6.5</td><td>Vs-Random gate</td><td><code>fail</code> → override (<code>vs_random</code>) or stop</td></tr>
+<tr><td>7</td><td>Validator (9 criteria)</td><td><code>any_fatal</code> → override (<code>critic_validator</code>) or stop</td></tr>
+<tr><td>8</td><td>Statistical gates</td><td>any fail → override (<code>gates:&lt;name&gt;</code>) or stop</td></tr>
+<tr><td>9</td><td>Risk</td><td><code>risk_score==7</code> → ask user; <code>≥8</code> → override (<code>risk</code>) or stop</td></tr>
+<tr><td>10</td><td>Memory record</td><td>default <code>deployment_status="archived"</code> (no auto-promote)</td></tr>
+<tr><td>11</td><td>Final report → <code>decision.json</code></td><td>top line ✓ / ✗ / 🔶 with-override</td></tr>
+</table>
+<p><b>The override mechanism (<code>/override-reject</code>).</b> A soft rejection can be overridden only with a justification of <b>≥ 20 characters</b> (blocks “yolo”), which is appended forever to <code>decision.json.override_log</code> and the memory DB, then the pipeline resumes at <i>failed-step + 1</i>.</p>
+<table>
+<tr><th>Overridable (soft)</th><th>Not overridable (hard)</th></tr>
+<tr><td><code>critic_pre, vs_random, critic_validator, gates:deflated_sharpe, gates:correlation, gates:pca, risk</code></td><td><code>sandbox_error, backtest_error, missing_data, missing_results_file</code></td></tr>
+</table>
+<p class="small">If three or more overrides have already been applied to a thesis, the override command prints a standing warning before resuming — visible discipline against override-creep.</p>
+
+<!-- ===================== PART III ===================== -->
+<h1>Part III — Agent deep dives</h1>
+<p class="lead">Each section states the agent’s role, the artifacts it reads and writes, and the <b>exact conditions it applies</b> — every threshold, template, and rubric is taken from the agent definition or the module it drives.</p>
+
+<h2>8. Agent 1 — Hypothesis-Refiner</h2>
+<p><b>Tools:</b> Read, Write, Grep, WebSearch. <b>Reads</b> <code>theses/&lt;id&gt;/thesis.md</code>; <b>writes</b> <code>refined.json</code> + <code>step_summaries/01_refiner.md</code>. It <i>formalises</i> a user’s prose into a machine-checkable spec and stress-tests it — it never invents a hypothesis.</p>
+<p>Specific rules it enforces (code-backed):</p>
+<ul>
+<li><b>Mode</b> is one of <code>single</code> (signal per ticker independently), <code>cross_sectional</code> (ranks tickers each bar), or <code>ASK_USER</code> when genuinely unclear.</li>
+<li><b>market_type names the TRADED instrument, not the signal source</b> — a strategy that uses skew/IV/VRP/GEX to trade the underlying stock is <code>equities</code>, not <code>options</code>. Allowed: <code>options | equities | indexes_and_index_etfs | crypto</code>. (This is exactly why the skew strategy is classified <code>equities</code>.)</li>
+<li>Both <code>works_in_regime</code> <b>and</b> <code>breaks_in_regime</code> are mandatory — the single most valuable disciplinary check.</li>
+<li>The stress-test must enumerate <b>three</b> specific failure modes; the warm-up buffer defaults to <code>max(252, 2 × lookback)</code> bars; <code>expected_sharpe_range</code> defaults to <code>[0.3, 0.8]</code> when the literature is unclear.</li>
+<li>It rejects vague theses (e.g. “oversold bounces work”) demanding concrete parameters, and never modifies <code>user_thesis_verbatim</code>.</li>
+</ul>
+<p><b>Emitted JSON keys:</b> <code>hypothesis_id, title, user_thesis_verbatim, rationale, spec{signal, direction, holding_period_bars, rebalance_bars, position_bounds}, mode, market_type, expected_sharpe_range, works_in_regime, breaks_in_regime, stress_test_concerns, data_plan{adapters, universe_source, date_range, warm_up_buffer_bars}, variations</code>.</p>
+
+<h2 class="np">9. Agent 2 — Pre-Critic (four market templates)</h2>
+<p><b>Tools:</b> Read, Write. <b>Reads</b> <code>refined.json</code>; <b>writes</b> <code>critique_pre.json</code>. Its mandate is blunt: “KILL bad ideas before they waste compute — when in doubt, KILL.” It routes to one of four templates by universe/signal, then applies that template’s checklist. A check tagged <code>[WARNING, NOT KILL]</code> moves the idea forward with a flag; anything else is a <code>kill_reason</code>.</p>
+<table>
+<tr><th>Template (routing)</th><th>Checks it runs (exact)</th></tr>
+<tr><td><b>OPTIONS</b><br/>(default; any IV/skew/options feature or holding options)</td><td>(1) implicit IV-surface look-ahead (ORATS EOD safe; intraday must be pinned); (2) short-vol blow-ups — require a tail hedge/stop and a backtest spanning 2008, 2018-02, 2020-03, 2022-Q1; (3) pin / early-assignment on short American legs (<i>long-only &amp; European SPX/NDX exempt</i>); (4) costs ignoring bid–ask — mid/close fills are <b>FATAL</b>; (5) dynamic Greek hedging without a rebalance interval + costs (<i>buy-and-hold exempt</i>); (6) <b>[WARNING]</b> illiquidity — mkt-cap &lt; $2B, front-two-expiry OI &lt; 10,000, or ADV &lt; $50M; (7) edge inside earnings/blackout/macro windows; (8) unnamed sector/leveraged/country ETFs.</td></tr>
+<tr><td><b>EQUITIES</b></td><td>(1) factor crowding since 2010; (2) survivorship; (3) few-name concentration (TSLA/NVDA/GME); (4) earnings/OPEX edge presented as universal; (5) costs ignoring short-borrow/HTB/locate; (6) a single optimised parameter.</td></tr>
+<tr><td><b>INDEXES &amp; index-ETFs</b></td><td>(1) already-arbitraged since 2010; (2) SPX AM vs PM settlement confusion; (3) pre-2022 data extrapolated to 0DTE; (4) performance not split event vs non-event; (5) VIX/VXX/UVXY/SVXY treated as index dynamics.</td></tr>
+<tr><td><b>CRYPTO</b></td><td>(1) cross-exchange timestamp look-ahead; (2) survivorship of dead tokens/exchanges; (3) funding-rate flips; (4) single-venue liquidity; (5) costs ignoring funding/gas/withdrawal; (6) leverage cascades (LUNA/3AC); (7) stablecoin de-peg untradeable.</td></tr>
+</table>
+<p><b>Output:</b> <code>verdict (pass|kill), market_type_applied, reasoning, kill_reasons[], warning_flags[]</code>. On <code>kill</code> the pipeline writes the final report and stops — overridable with <code>critic_pre</code>.</p>
+
+<h2>10. Agent 3 — Coder &amp; the execution sandbox</h2>
+<p><b>Tools:</b> Read, Write, Bash. <b>Reads</b> <code>refined.json</code>; <b>writes</b> one function named exactly <code>strategy</code> to <code>code/signal.py</code> (code only, no prose). The canonical output contract is the <b>fires frame</b>: one row per fire with at least <code>symbol, date, side∈{BULL,BEAR}, signal_sign∈{−1,+1}</code>, the forward returns <code>fwd_5/10/21</code>, and the stage flags <code>M1/M2/M3</code>. The Coder emits <b>raw</b> fires — the eligibility screen lives exactly once, downstream in <code>run_test</code>.</p>
+<table>
+<tr><th>Constraint</th><th>Exact rule (House rules / SKILL.md + sandbox)</th></tr>
+<tr><td>Allowed imports</td><td><b>only</b> <code>numpy</code>, <code>pandas</code>, <code>math</code>, <code>ai_quant_lab.features.library</code>, <code>ai_quant_lab.features.cross_sectional</code>. Anything else raises <code>SandboxError</code>. (<code>features_custom.*</code> is Phase-2, deliberately not yet on the allowlist.)</td></tr>
+<tr><td>No look-ahead</td><td><code>.shift(1)</code> to make values tradeable; <code>.rolling(window)</code> for trailing stats; <b>never</b> <code>center=True</code>.</td></tr>
+<tr><td>Output hygiene</td><td>positions end with <code>.clip(-1, 1)</code>; NaN treated as 0.</td></tr>
+<tr><td>Legacy single-asset signatures</td><td>(A) options → <code>(Series, DataFrame[delta,gamma,vega,theta])</code>; (B) price-only → <code>Series∈[−1,1]</code>; (C) cross-sectional → MultiIndex DataFrame, weights sum to 0 or 1.</td></tr>
+</table>
+<div class="box"><b>The sandbox is real.</b> <code>ai_quant_lab/orchestrator/sandbox.py::run_strategy</code> AST-walks the source and raises <code>SandboxError("Disallowed import: …")</code> for any module outside the allowlist; it also strips dangerous builtins (<code>open/eval/exec/__import__</code>), checks the <code>strategy</code> signature, validates the returned shape/index against the input, and enforces a <b>10-second wall-clock timeout</b>. Validation is by <b>functional equivalence</b> to the reference (<code>compute_consensus</code>) via <code>parity_gate.assert_fire_parity</code> and the standing <code>tests/test_parity_gate.py</code> — the target is <b>0 side disagreements</b> on the parity tickers; there is no “sandbox validate” CLI.</div>
+
+<h2 class="np">11. The signal it builds — M1 ∧ M2 ∧ M3</h2>
+<p>The Coder’s output reproduces <code>quant_validator/consensus_signal.py::compute_consensus</code> bit-for-bit. The signal fires only when all three readings agree on a side, within a freshness window.</p>
+<div class="fig"><img src="report_assets/fig04_signal.png"/></div>
+<div class="cap">Figure 4 — The per-ticker, per-day decision. Three independent surface readings must agree; freshness lets M1 and M2 co-fire within a 3-bar window; M3 confirms exhaustion; BULL wins ties; the side maps to a signed fade.</div>
+<table>
+<tr><th>Gate</th><th>BULL (→ short fade, sign −1)</th><th>BEAR (→ long fade, sign +1)</th></tr>
+<tr><td><b>M1</b> corner</td><td><code>putP ≤ 25 &amp; callP ≥ 75</code></td><td><code>putP ≥ 75 &amp; callP ≤ 25</code></td></tr>
+<tr><td><b>M2</b> vol + RR</td><td><code>ivP ≥ 75 &amp; rrP ≥ 75</code></td><td><code>ivP ≥ 75 &amp; rrP ≤ 25</code></td></tr>
+<tr><td><b>M3</b> stall</td><td><code>sigma.shift(3..0)</code> all <code>≥ 1.0</code> AND <code>|s3−s0| &lt; 0.3</code></td><td>all <code>≤ −1.0</code> AND <code>|s3−s0| &lt; 0.3</code></td></tr>
+<tr><td><b>M3</b> divergence</td><td><code>d0,d1,d2 &lt; 0 &amp; d3 &gt; d2 + 0.2</code> (skewDelta turns up)</td><td><code>d0,d1,d2 &gt; 0 &amp; d3 &lt; d2 − 0.2</code></td></tr>
+</table>
+<p><b>ConsensusOpts defaults:</b> <code>hi=75, lo=25, freshness=3, sigma_threshold=1.0, sigma_mode=True, skew_mode=True, require_both=False, allow_bull=True, allow_bear=True</code>. M3 confirms when stall <b>OR</b> divergence holds (default; <code>require_both</code> would AND them). <b>Freshness</b> applies a trailing rolling-OR <code>flag.rolling(3, min_periods=1).max()</code> to the M1/M2 flags, and the consensus fires only where the M1 and M2 “recent” flags and the M3 confirmation are all true on the <i>same</i> bar; <b>BULL wins ties</b>. Float forms are load-bearing: <code>d3 &gt; d2 + 0.2</code> (not <code>(d3−d2) &gt; 0.2</code>) and a 4-bar shift-AND (not <code>rolling(4).sum()==4</code>) — algebraically equal but not bit-equal (~332 ULP cases). Economically, <b>P&amp;L = signal_sign × 21-day forward return − costs</b>: a fade that profits when the crowded extreme reverts.</p>
+
+<h2>12. Agent 4 — Backtest (fires → verdict)</h2>
+<p><code>quant_validator/backtest.py</code> is the keystone adapter: the single bridge from a strategy’s fires frame to every downstream stage. It is generic — any strategy whose fires resolve to a <code>side</code> per (ticker, date) can be run.</p>
+<div class="fig"><img src="report_assets/fig05_backtest.png"/></div>
+<div class="cap">Figure 5 — The backtest adapter. The fire-parity gate runs first; the eligibility screen is applied exactly once inside <code>run_test</code>; four canonical artifacts are emitted.</div>
+<ul>
+<li><b>The screen, applied once:</b> price floor <code>raw_close ≥ $1</code>, <code>av_matched</code> true, and <code>|forward return| ≤ 5.0</code> (caps sub-$1 penny blow-ups). Strategies emit raw fires precisely so this screen is not double-applied.</li>
+<li><b>Four artifacts:</b> <code>vs_random.json</code> (the verdict), <code>returns.csv</code> (daily equal-weight book return), <code>positions.csv</code> (single-column net exposure → PCA N/A pass), <code>net_return_panel.csv</code> (per-trade panel, the sizing engine’s input). Daily Sharpe is annualised with <code>ANN = 252</code>; default <code>cost_bps = 20</code>.</li>
+<li><b>Fire-parity first:</b> if the declared reference is <code>compute_consensus</code>, the stored panel <code>side</code> must reproduce a fresh recompute on the parity tickers, or the stage writes <code>status:"fail", first_failure:"fire_parity"</code> and <b>refuses to score</b> (see §23).</li>
+</ul>
+
+<h2 class="np">13. The vs-random verdict engine</h2>
+<p>The verdict is not a Sharpe — it is a <b>selection</b> test. For each fire on date <i>t</i>, the engine draws random eligible tickers <b>on the same date</b> and applies the fire’s own <b>sign</b>, then bootstraps (×2000). This controls for market regime <i>and</i> holds the fade direction fixed, so it measures whether the signal <i>picks</i> better than chance — not whether the market drifted.</p>
+<div class="fig"><img src="report_assets/fig06_vsrandom.png"/></div>
+<div class="cap">Figure 6 — The date- and direction-matched random pool. The null is “a random name on the same day, traded the same direction”; the signal must beat that null.</div>
+<div class="fig"><img src="report_assets/chart04_verdict.png"/></div>
+<div class="cap">Chart 4 — The selection edge grows monotonically with horizon: +1.29 bps (5d) → +5.08 bps (10d) → +18.15 bps (21d), with z rising 1.21 → 3.54 → 8.87 (from the strategy’s <code>vs_random.json</code>).</div>
+<table>
+<tr><th>Horizon</th><th>n fires</th><th>Increment</th><th>Gross</th><th>Random</th><th>z</th><th>p</th><th>Beat-rate</th></tr>
+<tr><td>5-day</td><td>456,661</td><td>+1.29 bps</td><td>14.28</td><td>12.99</td><td>1.21</td><td>0.114</td><td>50.99%</td></tr>
+<tr><td>10-day</td><td>456,494</td><td>+5.08 bps</td><td>31.39</td><td>26.30</td><td>3.54</td><td>&lt;0.0005</td><td>51.30%</td></tr>
+<tr><td><b>21-day</b></td><td><b>454,798</b></td><td><b>+18.15 bps</b></td><td><b>106.96</b></td><td><b>88.82</b></td><td><b>8.87</b></td><td><b>&lt;0.0005</b></td><td><b>51.61%</b></td></tr>
+</table>
+<p class="small">Tier-A actual Sharpe 0.98, at the 99th percentile vs the random pool. The 5-day horizon is honestly weak (p 0.11) — the edge is a 10–21 day reversion, which is exactly why the hold is 21 days.</p>
+
+<h2>14. Agent 5 — Statistics &amp; the Deflated Sharpe</h2>
+<p><code>quant_validator/stats.py</code> computes the performance metrics and — critically — the multiple-testing-aware <b>Deflated Sharpe Ratio</b> (Bailey &amp; López de Prado).</p>
+<table>
+<tr><th>Metric</th><th>Definition</th></tr>
+<tr><td>Sharpe / Sortino / Calmar</td><td><code>mean/std·√252</code> · downside-only denominator · <code>annual_return/|maxDD|</code></td></tr>
+<tr><td>Max drawdown + duration</td><td>min of <code>(equity−peak)/peak</code> on <code>cumprod(1+r)</code>; longest below-peak run</td></tr>
+<tr><td>Distribution</td><td>skewness, excess kurtosis (Fisher), win-rate</td></tr>
+</table>
+<div class="box"><b>Deflated Sharpe (the anti-data-mining metric).</b> With <i>N</i> trials and <i>T</i> observations, the expected <i>maximum</i> Sharpe under the null is <code>SR* = σ̂_SR · [ (1−γ)·Φ⁻¹(1−1/N) + γ·Φ⁻¹(1−1/(N·e)) ]</code> (γ = Euler–Mascheroni), where <code>σ̂_SR² = (1/(T−1))·(1 − skew·SR + ((kurt−1)/4)·SR²)</code>. The reported <code>dsr_probability_real = Φ((SR − SR*)·√(T−1)/denom)</code> is the probability the true edge exceeds that data-mined maximum (higher is better); <code>dsr_pvalue = 1 − that</code> is what the gate reads. The number of trials <i>N</i> comes honestly from the memory store, so every experiment ever run inflates the bar. For the skew strategy at validation: <b>p 0.006, prob-real 0.994</b> (n_trials = 3).</div>
+
+<h2>15. Agent 6 — Vs-Random gate</h2>
+<p>Stage 6.5 turns the engine of §13 into a hard floor. <b>Tier A</b> (a timing permutation that randomises <i>when</i> the strategy is in the market at the same activity rate) is the non-negotiable floor; <b>Tier B</b> (a constraint-matched random-rule search) runs in Mode A only and is recorded <code>"not_available"</code> in Mode B. A <code>fail</code> halts the pipeline (overridable as <code>vs_random</code>); a <code>borderline</code> continues with a warning.</p>
+
+<h2>16. Agent 7 — Validator (nine criteria)</h2>
+<p><b>Tools:</b> Read, Write, Bash. It assumes the backtest is misleading and looks for the cracks, writing <code>critique_post.json</code> with a per-criterion verdict of <code>pass | warning | fatal</code>. It runs as the 4th gate, before the statistical gates.</p>
+<table>
+<tr><th>#</th><th>Criterion</th><th>pass / warning / fatal boundary</th></tr>
+<tr><td>1</td><td>Costs</td><td>spread+impact calibrated / bare fee_bps / no cost model</td></tr>
+<tr><td>2</td><td>Look-ahead</td><td><code>.shift(1)</code> clean / — / missing shift or <code>center=True</code></td></tr>
+<tr><td>3</td><td>Survivorship</td><td>point-in-time constituents / — / today’s index on history (single fixed ticker auto-pass)</td></tr>
+<tr><td>4</td><td>Optimizer constraints</td><td>caps present / missing for X-sectional / — (single-asset N/A)</td></tr>
+<tr><td>5</td><td>Market impact</td><td>√-impact or &lt;1% ADV / missing &gt;1% ADV / large size no model</td></tr>
+<tr><td>6</td><td>Participation cap</td><td><code>max_pct_adv ≤ 10%</code> / missing at size / ignores ADV on illiquid</td></tr>
+<tr><td>7</td><td>Deflated Sharpe</td><td><code>dsr_pvalue &lt; 0.95</code> / <code>0.85–0.95</code> / <code>≥ 0.95</code></td></tr>
+<tr><td>8</td><td>Regime-conditional</td><td>Sharpe + in all regimes / one regime only / negative in any (folds in the vs-random Tier-A verdict)</td></tr>
+<tr><td>9</td><td>OOS holdout</td><td>true untouched holdout / walk-forward alone / no OOS</td></tr>
+</table>
+<p>Output: <code>any_fatal</code>, <code>warnings_count</code>, and a <code>recommendation∈{reject, accept_with_warnings, accept}</code>. Bias: when in doubt → warning. Any fatal halts (overridable as <code>critic_validator</code>).</p>
+
+<h2 class="np">17. Agent 8 — Gatekeeper (statistical gate stack)</h2>
+<p><code>quant_validator/gates.py</code> applies four deterministic gates with hard default thresholds.</p>
+<div class="fig"><img src="report_assets/fig07_gates.png"/></div>
+<div class="cap">Figure 7 — The stage-8 gate stack and the strategy’s result at each gate. The Mutation Agent reuses this exact stack per variant.</div>
+<table>
+<tr><th>Gate</th><th>Pass condition</th><th>Edge behaviour</th><th>Skew result</th></tr>
+<tr><td>Deflated Sharpe</td><td><code>dsr_pvalue &lt; 0.95</code></td><td>N/A if dsr.json missing</td><td>0.006 — PASS</td></tr>
+<tr><td>Correlation</td><td><code>max|corr| with survivors &lt; 0.60</code></td><td><b>pass</b> if no survivors</td><td>PASS</td></tr>
+<tr><td>PCA concentration</td><td>top-PC variance share <code>&lt; 0.50</code></td><td>single-asset → N/A pass</td><td>N/A pass</td></tr>
+<tr><td>Vs-Random</td><td>Tier-A permutation floor (maps stage 6.5)</td><td>N/A if file missing</td><td>PASS</td></tr>
+</table>
+<p>The roll-up is <code>fail</code> if any gate fails, else <code>warning</code>, else <code>not_available</code>, else <code>pass</code>. A <code>fail</code> is a soft-overridable halt; a missing upstream artifact is explicitly <i>not</i> a fail. (Both <code>stats.py</code> and <code>gates.py</code> note that the 0.95 DSR ceiling is deliberately lenient for research and should be tightened toward 0.05–0.10 for production.)</p>
+
+<h2 class="np">18. Agent 9 — Risk &amp; the sizing engine</h2>
+<p><b>Tools:</b> Read, Write, Bash. The Risk agent runs <code>quant_validator/risk_stats.py</code> to compute deterministic statistics, scores risk 0–10, and recommends a deployment size as a fraction of the approved size; the <code>quant_validator/sizing.py</code> engine then turns approved trades into a sized book.</p>
+<div class="fig"><img src="report_assets/fig08_sizing.png"/></div>
+<div class="cap">Figure 8 — The sizing pipeline: per-trade net return → fractional portfolio Kelly → caps → drawdown kill-switch → monthly book.</div>
+<table>
+<tr><th>Risk-score lever</th><th>Trigger</th></tr>
+<tr><td>Cap size to 0.4 / 0.6</td><td>net short vega without / with a documented tail hedge</td></tr>
+<tr><td>Cap size to 0.5</td><td>excess kurtosis &gt; 6, or &gt; 50% of positions inside an event window (unless event-targeted)</td></tr>
+<tr><td>Warnings (no cap)</td><td>kurtosis &gt; 3, concentration share &gt; 0.4, max-ticker &gt; 25%, worst-1d −10…−15%, DD duration &gt; 90 days</td></tr>
+<tr><td><b>Hard reject (score ≥ 8)</b></td><td>regime asymmetry + net short vega, concentration &gt; 0.6, worst-1d &lt; −15% (non-deleveraging), max-ticker &gt; 35%</td></tr>
+<tr><td>Borderline (score = 7)</td><td>pause and ask the user (cap 0.3 / override to 0.5 / reject)</td></tr>
+</table>
+<p><b>The sizing engine (deployed constants):</b> per-trade <code>net_return = signal_sign · fwd_21 − cost_bps/10⁴</code> (cost 20 bps); fractional portfolio Kelly <code>f = λ·Σ⁻¹·μ</code> with <code>λ = 0.25</code> on a constant-correlation covariance (<code>ρ = 0.30</code>); caps applied in order — per-name <b>5%</b>, gross <b>1.0</b>, net <b>0.5</b>; and a hysteretic <b>drawdown kill-switch</b> that de-risks to <b>×0.3</b> when realised drawdown hits <b>−15%</b> and restores at <b>−7%</b> (hard flatten at −25%). Trades are bucketed into monthly cohorts (21-day hold ≈ one month). Result: <b>Sharpe 1.12, CAGR +5.82%, max drawdown −9.86%</b>, every year positive; the Risk agent scored 4/10 and recommended <b>0.5×</b>.</p>
+<div class="box warn"><b>Honest note on the kill-switch.</b> At deployed sizing the book’s worst drawdown (−9.86%) never reaches the −15% trigger, so the kill-switch does not engage in the deployed configuration — it is a <i>tail backstop</i> that bounds the depth of a future shock, not an entry filter. It cannot fix a selection miss such as the 2020 V-recovery; only the entry signal and the exits address that.</div>
+
+<h2>19. Agent 10 — Memory &amp; Reporter</h2>
+<p><b>Memory</b> (<code>quant_validator/memory.py</code>) is an append-only SQLite store. The <code>trials</code> table records every accept/reject with the honest DSR trial count at the time (<code>n_trials_at_time</code>), the metrics, and an <code>override_log_json</code>; a <code>trial_greeks</code> side table tracks net delta/gamma/vega for portfolio-level Greek aggregation. <code>deployment_status ∈ {archived(default), paper, live, retired}</code>; <code>n_trials()</code> = <code>COUNT(*)</code> feeds the Deflated Sharpe, and retired predecessors are excluded from the correlation gate so a successor isn’t blocked by the version it replaces. Overrides are never lost (a placeholder row is inserted if needed).</p>
+<p><b>Reporter</b> (the <code>report-rendering</code> Skill, stage 10) maintains <b>one living, self-contained HTML report per strategy</b>: a canonical <code>report.json</code> (each stage writes only its own slice — append-and-update, never wipe) and a <code>report.html</code> that is a pure function of it, with charts baked as <b>inline SVG</b> (no CDN/JS, prints to PDF). Sections render in order: stages 1–10, a robustness block (cost-survival, temporal, regime), a phases block (Phase-4 paper / Phase-5 live with the owned-positions table, the ranked exit options, and the next-open trade queue), and a Mutations section. On a full re-run the version bumps and the prior HTML is snapshotted.</p>
+
+<!-- ===================== PART IV ===================== -->
+<h1>Part IV — The optimisation layer</h1>
+<p class="lead">Stages 1–10 answer “is it real and how big?” The optimisation layer answers “can we make it better without fooling ourselves?” Its primary job is to <b>search hard while refusing to overfit</b> — the guardrails are the product.</p>
+
+<h2 class="np">20. Agent 11 — Mutation (the constrained optimiser)</h2>
+<p><code>quant_validator/mutation_agent.py</code> is a closed loop: propose a guarded variant → re-fire and path-backtest it across walk-forward folds → risk-score it against the baseline and the drawdown bound → feed back → propose again. It is <b>thesis-locked</b> (the M1∧M2∧M3 edge is never mutated, only knobs around it) and bounded by two governors.</p>
+<div class="fig"><img src="report_assets/fig09_optloop.png"/></div>
+<div class="cap">Figure 9 — The closed optimisation loop and its two governors: a hard maximum-drawdown bound, and a multiple-testing / Deflated-Sharpe penalty applied to the <i>whole</i> search.</div>
+<table>
+<tr><th>Candidate set</th><th>Members (code-backed)</th></tr>
+<tr><td><b>Exit</b> (11, cheap — reuse fires + OHLC)</td><td>hard-stop only at 8/6/10/5%, Bollinger band only, hard-stop+Bollinger mean, trailing+Bollinger, base+vol-spike, base+squeeze, base+tail, hard-stop+profit-target</td></tr>
+<tr><td><b>Universe</b> (2, cheap — fire filter)</td><td>liquid <code>raw_close ≥ 5</code>, liquid <code>≥ 10</code></td></tr>
+<tr><td><b>Entry</b> (4, expensive — re-fire consensus)</td><td>corner 70/30, corner 80/20, freshness 5, sigma 1.5</td></tr>
+</table>
+<p><b>Promotion is hard.</b> A variant must beat the baseline Sharpe on a <b>majority</b> of folds, keep <code>pooled maxDD ≥ −0.25</code>, retain <b>≥ 50%</b> of the baseline mean edge, and beat the pooled Sharpe — <i>and then</i> survive the multiple-testing penalty. The Deflated-Sharpe trial count is <b>cumulative</b>: <code>n_trials = 12 (the Exit Agent’s prior candidates) + 18 (this run) = 30</code>, so every variable tried inflates the bar for the best one.</p>
+<div class="fig"><img src="report_assets/chart06_mutation.png"/></div>
+<div class="cap">Chart 6 — Walk-forward Sharpe of all 18 variants vs the baseline (red line, 1.036). Several beat raw Sharpe — <code>exit_hardstop_5_tight</code> 1.229, <code>entry_corner_80_20</code> 1.124 — but none cleared the joint promotion + multiple-testing bar.</div>
+<div class="fig"><img src="report_assets/chart07_mtbar.png"/></div>
+<div class="cap">Chart 7 — The decisive test. At 30 cumulative trials the best variant’s deflated probability-of-real is 0.874, below the 0.95 bar. The optimiser correctly promoted <b>nothing</b>.</div>
+<div class="box good"><b>Result: NO VALIDATED IMPROVEMENT — and that is a success.</b> 18 candidates, 30 cumulative trials, runtime 88s. Best variant = the baseline (v22 + 6b exits): Sharpe 1.036, maxDD −5.25%. The expected maximum Sharpe under the null at 30 trials is 0.036; the best annualised Sharpe was 0.891 → deflated prob-real 0.874 &lt; 0.95. The guardrails refused to ship an overfit; the strategy sits at a local optimum.</div>
+
+<h2>21. Agent 12 — Exit (technical-analysis exits)</h2>
+<p><code>quant_validator/exit_agent.py</code> replaces “always ride to day 21” with finding the exit that captures the most profit before the fade reverts. It has three parts: a sign-aware rule library, an out-of-sample walk-forward selection, and a run-time ranker.</p>
+<table>
+<tr><th>Rule builder</th><th>Default params</th><th>Purpose</th></tr>
+<tr><td><code>r_time</code></td><td>21 bdays</td><td>non-negotiable time backstop</td></tr>
+<tr><td><code>r_hard_stop</code></td><td>8%</td><td>tail / loss control</td></tr>
+<tr><td><code>r_trailing_stop</code></td><td>10%</td><td>give-back control</td></tr>
+<tr><td><code>r_profit_target</code></td><td>15%</td><td>lock a win</td></tr>
+<tr><td><code>r_bollinger_reversion</code></td><td>n=20, k=2.0, target mean|band</td><td>the fade’s take-profit (entry-context-aware)</td></tr>
+<tr><td><code>r_vol_spike</code></td><td>yz5 or atm_iv ≥ 0.80</td><td>regime-turn exit</td></tr>
+<tr><td><code>r_squeeze</code></td><td>skew ≤ −2.0</td><td>short-side squeeze tail control (the 2021-01 answer)</td></tr>
+</table>
+<p><b>OOS selection</b> (20,000-fire sample, 5 time folds, 20 bps): a rule survives only if it beats the baseline Sharpe on a majority of folds <i>or</i> cuts max drawdown on a majority, <b>and</b> keeps ≥ 50% of the baseline mean edge. The baseline (21-day backstop) scored Sharpe 0.879, maxDD −23.95%, −608.5 bps on 2021-01.</p>
+<div class="fig"><img src="report_assets/chart08_exit.png"/></div>
+<div class="cap">Chart 8 — Exit-rule Sharpe (left) and max drawdown (right). Green = OOS-validated. <code>hard_stop_8</code> lifts Sharpe to 1.08 and cuts drawdown to −10%; <code>boll_reversion_band</code> keeps ~97 bps of edge while cutting drawdown on all five folds.</div>
+<table>
+<tr><th>Rule</th><th>Survives?</th><th>Sharpe</th><th>Max DD</th><th>Mean bps</th><th>2021-01 vs base</th></tr>
+<tr><td>baseline 21d</td><td>—</td><td>0.879</td><td>−23.95%</td><td>100.7</td><td>—</td></tr>
+<tr><td><b>hard_stop_8</b></td><td><b>YES</b></td><td><b>1.075</b></td><td><b>−9.97%</b></td><td>58.9</td><td><b>+516.2 bps</b></td></tr>
+<tr><td><b>boll_reversion_band</b></td><td><b>YES</b></td><td>0.867</td><td>−21.9%</td><td><b>96.7</b></td><td>+63.1 bps</td></tr>
+<tr><td>tail_control</td><td>no (edge-keep)</td><td>1.059</td><td>−7.06%</td><td>42.8</td><td>+675.3 bps</td></tr>
+<tr><td>vol_spike_atm_iv</td><td>no</td><td>−0.528</td><td>−14.48%</td><td>−13.7</td><td>+502.8 bps</td></tr>
+</table>
+<p><b>Deployed policy:</b> <code>hard_stop_8 + boll_reversion_band + 21-day backstop</code> (sign-aware). At run time the ranker surfaces 2–3 exits per open position by urgency (<code>act_now &gt; target &gt; backstop &gt; watch</code>). The protective rules are enforced in the live loop; the profit-target is advisory by default.</p>
+
+<!-- ===================== PART V ===================== -->
+<h1>Part V — Backtest fidelity</h1>
+<h2 class="np">22. The path-dependent engine</h2>
+<p><code>quant_validator/backtest_path.py</code> walks daily adjusted OHLC bar-by-bar so the exit rules can see intrabar touches the close-to-close panel cannot. Rules are evaluated in priority order; the <b>first</b> rule to trigger on the <b>earliest</b> bar wins.</p>
+<table>
+<tr><th>Rule</th><th>Long / short trigger (sign-mirrored)</th></tr>
+<tr><td>hard_stop / trailing_stop</td><td>low ≤ entry·(1−p) / high ≥ entry·(1+p); trailing tracks run-max/run-min</td></tr>
+<tr><td>profit_target</td><td>high ≥ entry·(1+p) / low ≤ entry·(1−p)</td></tr>
+<tr><td>bollinger_mean / band</td><td>price reverts to the SMA-n mid / to entry ± k·σ band</td></tr>
+<tr><td>bollinger_reversion</td><td>entry-context-aware: arms only if entered on the extended side, then targets mean or band</td></tr>
+<tr><td>vol_spike / squeeze</td><td>Yang-Zhang 5-day or ATM-IV ≥ threshold / (short only) skew ≤ −threshold</td></tr>
+<tr><td>time_backstop</td><td>t ≥ entry + 21 bdays — the non-negotiable floor</td></tr>
+</table>
+<p>The default <code>entry_mode = "signal_close"</code> fills at the signal-date close, preserving the close-to-close basis the verdict was validated on (the alternative <code>"next_open"</code> mirrors live OPG fills). Crucially, when the only rule is the time backstop, the engine reproduces <code>av_fwd_21_total</code> bit-for-bit — a fast path the parity gate verifies to <code>&lt; 1e-9</code>.</p>
+
+<h2>23. Parity discipline</h2>
+<p>A generated strategy must not reach scoring if it disagrees with its declared reference. <code>quant_validator/parity_gate.py</code> enforces this.</p>
+<div class="fig"><img src="report_assets/fig10_parity.png"/></div>
+<div class="cap">Figure 10 — The fire-parity gate. The runtime gate enforces <i>materialization</i> parity (the stored side that <code>run_test</code> actually scores == a fresh <code>compute_consensus</code> recompute); generated-vs-reference is held as a standing test.</div>
+<ul>
+<li>Comparison runs on a fixed cross-sector ticker set <code>AAPL, MSFT, XOM, JPM</code> over the six feature columns, with tolerance <b>0</b> — any single disagreement raises <code>ParityError</code> and the backtest writes <code>first_failure:"fire_parity"</code> and refuses to score.</li>
+<li>Three standing tests guarantee the gate bites — including one that injects a <b>BULL↔BEAR swap</b> and asserts a <code>ParityError</code> is raised. A novel thesis that declares no reference skips the gate cleanly.</li>
+</ul>
+
+<h2 class="np">23b. The backtest-realism ladder</h2>
+<p>A backtest result means little without knowing how realistic the simulation was. This system climbs a deliberate ladder of fidelity, and — crucially — proves each rung reproduces the one below it, so added realism never quietly changes the verdict.</p>
+<table>
+<tr><th>Rung</th><th>What it adds</th><th>Realism caveat it removes</th><th>Where</th></tr>
+<tr><td>1 — Selection verdict</td><td>Signed forward returns vs a same-day, same-direction random pool</td><td>“It’s just market drift / beta.”</td><td><code>run_test</code></td></tr>
+<tr><td>2 — Cost-aware</td><td>20 bps round-trip charged on every trade</td><td>“Frictionless fills flatter the edge.”</td><td><code>cost_bps</code> in adapter + sizing</td></tr>
+<tr><td>3 — Eligibility-screened</td><td>$1 floor, |fwd| ≤ 5.0, AV-matched, survivorship-free universe</td><td>“Penny flukes / dead tickers carry it.”</td><td><code>run_test</code> screen + clean panel</td></tr>
+<tr><td>4 — Path-dependent</td><td>Bar-by-bar adjusted OHLC so intrabar stop/target/Bollinger touches are seen</td><td>“Close-to-close hides the real exit.”</td><td><code>backtest_path._simulate</code></td></tr>
+<tr><td>5 — Parity-locked</td><td>Time-backstop path reproduces close-to-close to &lt; 1e-9; live <code>_simulate</code> == backtest, rule-for-rule</td><td>“The live engine differs from the test.”</td><td><code>parity_gate</code>, <code>exit_parity_check</code></td></tr>
+<tr><td>6 — Live OPG</td><td>Market-on-open fills, shortability gate, idempotent orders, staleness guard</td><td>“It can’t actually be traded.”</td><td><code>fills.py</code> (Alpaca)</td></tr>
+</table>
+<p>The default <code>entry_mode = "signal_close"</code> keeps rungs 1–5 on the exact close-to-close basis the verdict was validated on; switching to <code>"next_open"</code> moves to the live OPG basis on purpose. Because each rung is parity-checked against the previous one, the +18.15 bps / z 8.87 selection verdict and the 1.12-Sharpe sized book are the <i>same</i> result viewed at increasing realism — not three different backtests.</p>
+
+<!-- ===================== PART VI ===================== -->
+<h1>Part VI — From idea to live</h1>
+<h2 class="np">24. The data layer</h2>
+<p>The signal is only as good as the panel under it. The data layer is survivorship-free and point-in-time by construction.</p>
+<table>
+<tr><th>Component</th><th>What it is</th></tr>
+<tr><td>ORATS surface</td><td>Full-universe by-date backfill (~5,805 tickers/day); the six signal features recomputed bit-identical to the reference tool (252-day rolling percentiles; sigma = 5-day move / 20-day vol)</td></tr>
+<tr><td>Survivorship</td><td>AV <code>LISTING_STATUS</code> builds an active + delisted master; <code>symbol_map</code> resolves ORATS→AV (exact then punctuation-normalised; unmatched never silently dropped)</td></tr>
+<tr><td>Path bars</td><td>AV <code>TIME_SERIES_DAILY_ADJUSTED</code> (premium) → split/dividend-adjusted OHLC, the path engine’s input</td></tr>
+<tr><td>Clean panel</td><td><code>signal_panel_clean.parquet</code> — merged signal × adjusted OHLC, ~8,519 tickers, pre-computed forward returns; 454,798 fires, 2013–2026</td></tr>
+<tr><td>Warm-up</td><td><code>WARMUP_BDAYS = 756</code> (3yr ORATS), <code>WARMUP_START = 2013-11-26</code> — every percentile/sigma window is fully warmed</td></tr>
+<tr><td>Live feed</td><td><code>run_live</code> backfills the gap, rebuilds the trailing-756 panel, fires the latest session (~150–250/day), and flips <code>is_live_orats</code> — it verifies, it does not trade</td></tr>
+</table>
+
+<h2 class="np">25. Paper-trading execution</h2>
+<p><code>quant_validator/fills.py</code> enforces both entry and exit on Alpaca through a pluggable <code>FillSource</code> seam (<code>modeled | alpaca_paper | alpaca_live</code>). Phase 5 (live) is the same code with <code>paper=False</code>, gated on an accrued track record.</p>
+<div class="fig"><img src="report_assets/fig11_paper.png"/></div>
+<div class="cap">Figure 11 — The Phase-4 daily loop. DRY-RUN by default; nothing fires without an explicit, graduated <code>--submit</code>.</div>
+<table>
+<tr><th>Safety default</th><th>Rule (non-negotiable)</th></tr>
+<tr><td>Idempotency</td><td><code>client_order_id = "{strategy}:{symbol}:{signal_date}"</code> — Alpaca rejects duplicates, so a re-run is a no-op</td></tr>
+<tr><td>Reconcile-first</td><td>account / positions / open-orders are reconciled before <b>every</b> action</td></tr>
+<tr><td>Only act on ours</td><td>the loop touches only ledger-tagged positions — never an unknown position</td></tr>
+<tr><td>Staleness guard</td><td>refuse a signal older than <b>2 business days</b> (unless <code>--allow-stale</code>)</td></tr>
+<tr><td>Caps</td><td>per-name 5%, gross 1.0, net 0.5 — a breach hard-aborts the submit</td></tr>
+<tr><td>Shortability</td><td>non-shortable shorts are skipped + logged, not hard-rejected</td></tr>
+<tr><td>Order type</td><td>market-on-open (<code>OPG</code> TIF), mirroring the backtest’s next-open basis</td></tr>
+<tr><td>Exit enforcement</td><td><code>ENFORCE_EXITS = risk_only</code> (default): kill-switch + <code>hard_stop_8</code> + 21D backstop enforced; profit-target advisory. <code>enforced</code> adds the Bollinger reversion band.</td></tr>
+</table>
+<p>The manage loop reconciles, runs the kill-switch (hard-flatten at −25%), enforces the protective exits via the same <code>_simulate</code> used in the backtest (parity by construction — <code>exit_parity_check</code> must be 100% bit-identical), and runs the scheduled 21-day closes. Sessions are US-holiday-aware. <b>Current live book (DRY-RUN):</b> a queue of 194 OPG orders (110 long / 84 short; 21 intended shorts dropped non-shortable) for the 2026-05-26 open, gross 0.4337 / net 0.0898 at 0.5×, held behind the first-day review gate.</p>
+
+<h2 class="np">26. End-to-end walkthrough — a worked lifecycle</h2>
+<p class="lead">This is the payoff: how a strategy an analyst <i>incubates</i> as a sentence travels the whole system to a paper fill.</p>
+<div class="fig"><img src="report_assets/fig12_lifecycle.png"/></div>
+<div class="cap">Figure 12 — The full lifecycle across four swimlanes: the user, the design-time pipeline (1–10), the optimisation layer (11–12), and paper/live execution (4–5).</div>
+<ol>
+<li><b>Incubate (user).</b> The analyst writes a prose thesis into <code>thesis.md</code> — e.g. “when the options surface shows a crowded, exhausted skew extreme, fade the underlying over ~a month.”</li>
+<li><b>Refine (1).</b> The Hypothesis-Refiner formalises it: <code>market_type = equities</code> (it trades the stock), <code>mode = single</code>, holding 21 bars, with a mandatory <code>works_in_regime</code> / <code>breaks_in_regime</code> pair and three named failure modes.</li>
+<li><b>Screen (2).</b> The Pre-Critic routes to the OPTIONS template and runs its eight checks (look-ahead, short-vol tails, costs, illiquidity, event windows…). Survivable concerns become <code>warning_flags</code>; a fatal flaw would kill it here.</li>
+<li><b>Code &amp; gate (3→4).</b> The Coder writes the fires-frame <code>strategy()</code>; the fire-parity gate confirms it reproduces <code>compute_consensus</code> on AAPL/MSFT/XOM/JPM with 0 disagreements, then the Backtest applies the eligibility screen once and scores it.</li>
+<li><b>Prove the edge (5→8).</b> Statistics report a Deflated-Sharpe p of 0.006 (prob-real 0.994); the Vs-Random gate confirms +18.15 bps / z 8.87 at 21 days; the Validator’s nine criteria pass; the Gatekeeper’s DSR / correlation / PCA / vs-random gates all clear.</li>
+<li><b>Size &amp; record (9→10).</b> The Risk agent scores 4/10 and recommends 0.5×; the sizing engine produces a Sharpe-1.12 / −9.86%-drawdown book; Memory logs the trial and the Reporter renders the living HTML report.</li>
+<li><b>Optimise (11→12).</b> The Mutation Agent searches 18 variants under the drawdown + multiple-testing governors and promotes none (0.874 &lt; 0.95); the Exit Agent validates <code>hard_stop_8 + boll_reversion_band</code> out-of-sample and they are banked for risk control.</li>
+<li><b>Paper (4) &amp; live (5).</b> The strategy deploys at 0.5× in DRY-RUN; each day the live ORATS feed → manage loop (enforced exits + kill-switch) → sized, shortability-gated queue → first-day review gate. An explicit, graduated <code>--submit</code> begins real paper fills; Phase 5 (live broker) is the same code, gated on the accrued paper track record.</li>
+</ol>
+
+<!-- ===================== PART VII ===================== -->
+<h1>Part VII — Results &amp; appendices</h1>
+<h2 class="np">27. Results gallery &amp; the honest read</h2>
+<div class="fig"><img src="report_assets/chart01_equity.png"/></div>
+<div class="cap">Chart 1 — The sized equity curve (deployed configuration). Growth of $1 from the 2013-11 warm-up boundary through 2026.</div>
+<div class="fig"><img src="report_assets/chart02_peryear.png"/></div>
+<div class="cap">Chart 2 — Return by calendar year. Every year is positive — the breadth (hundreds of small, independent fades per month) is the source of the smoothness.</div>
+<div class="fig"><img src="report_assets/chart03_drawdown.png"/></div>
+<div class="cap">Chart 3 — The underwater curve. Worst drawdown −9.86%; the kill-switch’s −15% trigger is never reached at deployed sizing.</div>
+<div class="fig"><img src="report_assets/chart05_temporal.png"/></div>
+<div class="cap">Chart 5 — 21-day selection increment by year. The edge is positive in most years; 2016–2017 are honestly flagged (21-day p &gt; 0.05) — the system reports its weak years rather than hiding them.</div>
+<div class="fig"><img src="report_assets/chart09_squeeze.png"/></div>
+<div class="cap">Chart 9 — The 2021-01 meme-squeeze, the worst case. The raw fade was run over; <code>hard_stop_8</code> turns the month around (+516 bps vs no stop) and 0.5× sizing brings the booked month to −0.88%.</div>
+<div class="box"><b>The honest read.</b> The edge is real and robust — it beats a date- and direction-matched random pool by 18 bps over 21 days with z 8.87 across ~455k fires and 13 years, survives a multiple-testing-aware Deflated Sharpe, and holds across most regimes — but it is <b>economically modest</b> (a ~1.1 Sharpe) with one known weakness: a sharp V-shaped recovery runs over the fade (2020). That weakness is exactly why the optimisation layer is constrained rather than free-running, and why the next milestone is a paper track record before any leverage increase or live transition.</div>
+
+<h2 class="np">27b. Limitations, failure modes &amp; roadmap</h2>
+<p>An honest system documents where it is weak. These are stated plainly so they are managed, not discovered.</p>
+<table>
+<tr><th>Limitation / failure mode</th><th>Consequence</th><th>Mitigation / status</th></tr>
+<tr><td>V-recovery regime risk</td><td>A sharp, broad V-shaped rebound (e.g. 2020) runs over the short side of the fade — the worst structural exposure.</td><td>Earnings/short-trend filters + <code>hard_stop_8</code> + the kill-switch bound the damage; not eliminated.</td></tr>
+<tr><td>Economically modest edge</td><td>~1.1 Sharpe — real but not spectacular; sensitive to cost assumptions.</td><td>Costed at 20 bps; cost-survival breakeven tracked; deployed at 0.5×.</td></tr>
+<tr><td>Short-side capacity</td><td>~10% of intended shorts are non-shortable on a given day (dropped, not forced).</td><td>Shortability gate skips + logs; net exposure cap absorbs the imbalance.</td></tr>
+<tr><td>Single live data vendor</td><td>The signal depends on the ORATS surface; a feed outage stalls new fires.</td><td>Staleness guard refuses signals &gt; 2 bdays old; manage loop still runs exits.</td></tr>
+<tr><td>Lenient research DSR ceiling</td><td>The 0.95 DSR p-value gate is deliberately permissive for exploration.</td><td>Code comments flag tightening toward 0.05–0.10 for production; the optimiser already uses 0.95 as a <i>floor</i> for promotion.</td></tr>
+<tr><td>No paper track record yet</td><td>Live OOS performance is unproven; backtest ≠ live.</td><td>Phase-5 (live) is gated on an accrued paper record (≥ 60 sessions, live Sharpe ≥ 0.5× backtest).</td></tr>
+<tr><td>Sector concentration unmodelled</td><td>GICS sector caps are a parameterised hook, not yet active (no sector map in panel).</td><td>Per-name 5% + net 0.5 caps limit single-name and directional risk meanwhile.</td></tr>
+</table>
+<p><b>Roadmap.</b> (1) Accrue the paper track record on the live ORATS feed — the immediate next step. (2) Then the live transition (Phase 5): identical code, <code>paper=False</code> + live keys. (3) Longer-horizon: tighten the production DSR ceiling, add the sector map to activate sector caps, and graduate the Phase-2 <code>features_custom.*</code> modules onto the sandbox allowlist behind an import-safety audit.</p>
+
+<h2 class="np">27c. Incubating your own thesis — a practical guide</h2>
+<p>The pipeline is generic: any prose trading idea can travel it, not just the skew fade. This is how an analyst incubates a new thesis and what to expect at each gate.</p>
+<h3>What you write</h3>
+<p>A short <code>thesis.md</code> in plain English. The Hypothesis-Refiner does the formalising — you do not write JSON or code. A good thesis states: the <b>signal</b> (what you observe), the <b>action</b> (what you trade and which direction), the <b>horizon</b> (how long you hold), and — most usefully — <b>when you expect it to work and when to break</b>.</p>
+<table>
+<tr><th>Strong thesis (passes refining)</th><th>Weak thesis (gets sent back)</th></tr>
+<tr><td>“When 30-delta put skew spikes into an earnings drift, buy the underlying for ~2 weeks; works in calm tapes, breaks in a vol shock.”</td><td>“Oversold stocks bounce.” (no parameters, no regime, no horizon)</td></tr>
+</table>
+<h3>What the system needs &amp; refuses</h3>
+<ul>
+<li><b>Data must be on the available list.</b> If your idea needs a feed the system can’t fetch (or a subscription it lacks), the refiner flags it and the run pauses rather than fabricating data.</li>
+<li><b>The traded instrument sets <code>market_type</code>.</b> Using options data to trade the stock is <code>equities</code> — this changes which Pre-Critic template screens you.</li>
+<li><b>It will try to kill your idea early.</b> The Pre-Critic is adversarial by design (“when in doubt, KILL”). A survivable concern becomes a warning; a fatal one (e.g. mid-price option fills) stops you before any compute is spent.</li>
+<li><b>You cannot tune your way to a pass.</b> Every variant you try raises the Deflated-Sharpe bar via the cumulative trial count — quietly re-running with new parameters makes the next “win” harder to clear, on purpose.</li>
+</ul>
+<h3>How to read the verdict</h3>
+<ol>
+<li><b>Did it beat the random pool?</b> The selection increment and z (stage 6) are the first real signal — a positive Sharpe alone is not enough.</li>
+<li><b>Did it survive the Deflated Sharpe?</b> Check <code>dsr_pvalue</code> against the trial count — a great Sharpe at 200 trials may be noise.</li>
+<li><b>What did the Validator flag?</b> Warnings are acceptable and logged; a fatal needs a written, ≥ 20-character override that lives forever in the audit trail.</li>
+<li><b>How big did Risk allow?</b> The <code>size_recommendation</code> (default 0.5×) and the concerns list tell you how much the officer trusts the tails.</li>
+</ol>
+<div class="box"><b>The contract you get back.</b> A single <code>decision.json</code> (✓ accepted / ✗ rejected / 🔶 accepted-with-override) plus a living HTML report you can open in a browser or print to PDF — every stage, every number, every override, on one page. If accepted, the strategy can be deployed to DRY-RUN paper trading with one command and graduated to real paper fills with an explicit <code>--submit</code>.</div>
+
+<h2 class="np">28. Glossary</h2>
+<table>
+<tr><th>Term</th><th>Meaning</th></tr>
+<tr><td>Fade</td><td>Trade <i>against</i> a crowded extreme, expecting reversion (BULL corner → short; BEAR corner → long).</td></tr>
+<tr><td>Fires frame</td><td>The canonical strategy output: one row per (ticker, date) signal with side, sign, forward returns, and stage flags.</td></tr>
+<tr><td>Selection increment</td><td>How much the signal beats a same-day, same-direction random pick — the engine measures selection skill, not market drift.</td></tr>
+<tr><td>Deflated Sharpe (DSR)</td><td>A Sharpe haircut for the number of trials tried, so data-mining a good-looking number doesn’t pass.</td></tr>
+<tr><td>Materialization parity</td><td>The stored panel side that the verdict actually scores must equal a fresh reference recompute — bit-for-bit.</td></tr>
+<tr><td>Kill-switch</td><td>A hysteretic drawdown governor that de-risks the book to 0.3× at −15% and restores at −7%.</td></tr>
+<tr><td>Idempotent client_order_id</td><td>A deterministic order key so re-running the daily loop never double-submits.</td></tr>
+<tr><td>OPG</td><td>Market-on-open time-in-force, matching the backtest’s next-open fill basis.</td></tr>
+</table>
+
+<h2>29. Constants &amp; thresholds quick-reference</h2>
+<table>
+<tr><th>Domain</th><th>Constant</th><th>Value</th></tr>
+<tr><td>Signal</td><td>hi / lo percentile, freshness, sigma_threshold</td><td>75 / 25, 3 bars, 1.0</td></tr>
+<tr><td>Signal</td><td>divergence threshold (d3 vs d2)</td><td>± 0.20</td></tr>
+<tr><td>Sign</td><td>BULL / BEAR</td><td>−1 (short) / +1 (long)</td></tr>
+<tr><td>Screen</td><td>price floor, max |forward return|</td><td>$1, 5.0</td></tr>
+<tr><td>Backtest</td><td>horizons, annualisation, cost</td><td>5 / 10 / 21, 252, 20 bps</td></tr>
+<tr><td>Vs-random</td><td>bootstrap draws</td><td>2000</td></tr>
+<tr><td>Gates</td><td>DSR p-value max, correlation max, PCA share max</td><td>0.95, 0.60, 0.50</td></tr>
+<tr><td>Sizing</td><td>Kelly λ, correlation ρ</td><td>0.25, 0.30</td></tr>
+<tr><td>Sizing caps</td><td>per-name, gross, net</td><td>5%, 1.0, 0.5</td></tr>
+<tr><td>Kill-switch</td><td>enter / de-risk / exit / hard</td><td>−15% / ×0.3 / −7% / −25%</td></tr>
+<tr><td>Risk</td><td>hard-reject score, default deploy</td><td>≥ 8, 0.5×</td></tr>
+<tr><td>Exits</td><td>deployed policy</td><td>hard_stop 8% + Bollinger reversion band + 21D backstop</td></tr>
+<tr><td>Optimiser</td><td>prior trials, prob-real bar, DD bound, edge-keep</td><td>12, 0.95, −0.25, 0.50</td></tr>
+<tr><td>Paper</td><td>staleness, order type, default mode</td><td>≤ 2 bdays, OPG, DRY-RUN</td></tr>
+<tr><td>Data</td><td>warm-up, panel start anchor</td><td>756 bdays, 2013-11-26</td></tr>
+<tr><td>Parity</td><td>tickers, tolerance</td><td>AAPL/MSFT/XOM/JPM, 0</td></tr>
+</table>
+
+<h2>30. Audit-trail map</h2>
+<p>Every run leaves a complete, append-only paper trail under <code>theses/&lt;id&gt;/</code>, so any verdict can be reconstructed and any override audited.</p>
+<table>
+<tr><th>Stage</th><th>Artifact</th></tr>
+<tr><td>0–1</td><td><code>thesis.md</code> → <code>refined.json</code> + <code>step_summaries/01_refiner.md</code></td></tr>
+<tr><td>2</td><td><code>critique_pre.json</code></td></tr>
+<tr><td>3–4</td><td><code>code/signal.py</code>, <code>results/{vs_random.json, returns.csv, positions.csv, net_return_panel.csv}</code></td></tr>
+<tr><td>5–6</td><td><code>results/{metrics.json, dsr.json, walk_forward.json}</code></td></tr>
+<tr><td>7–9</td><td><code>critique_post.json</code>, <code>gates_outcome.json</code>, <code>risk.json</code></td></tr>
+<tr><td>10–11</td><td><code>memory.db</code> row, <code>reports/&lt;strategy&gt;/report.{json,html}</code>, <code>decision.json</code></td></tr>
+<tr><td>cross-cutting</td><td><code>audit_log.jsonl</code>, <code>user_interactions.jsonl</code>, optimisation <code>reports/{mutation_agent,exit_agent_selection}.json</code></td></tr>
+</table>
+
+<p style="margin-top:18pt; text-align:center; color:#455a72; font-style:italic; font-size:9pt; page-break-before:avoid;">— End of report —<br/>Confidential working document · Skew-Consensus Validation System · Extended Companion to Project Record v2.2 · May 2026.<br/>Every numeric value above is sourced from the codebase on branch <span class="mono">claude/funny-elbakyan-1e8456</span>.</p>
+
+</body></html>
