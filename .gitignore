@@ -46,3 +46,8 @@ stan_fork_overlay_*.zip
 _tmp_overlay/
 data/
 adapters/*.bak-*
+
+# Pre-carve: regenerable svr run artifacts + db backups
+svr_*.out
+svr_verdict_*.json
+memory.db.bak-*
