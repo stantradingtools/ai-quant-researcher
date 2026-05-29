@@ -48,9 +48,9 @@ li { margin: 2pt 0; font-size: 9.3pt; }
   <div class="rule"></div>
   <div class="s">An Extended, Code-Backed Companion:<br/>Agents, Workflows, and the Path from Hypothesis to Live Paper Trading</div>
   <div class="m">
-    Companion to <b>Project Record v2.2</b> &nbsp;·&nbsp; expands every agent, every condition, every handoff<br/>
+    Companion to <b>Project Record v2.3</b> &nbsp;·&nbsp; expands every agent, every condition, every handoff<br/>
     Twelve agents · ten-stage validation pipeline · two-agent optimisation layer · enforced paper trading<br/>
-    Strategy of record: <b>skew_consensus_v22_novix</b> &nbsp;·&nbsp; ~454,798 fires, 2013–2026, survivorship-free<br/><br/>
+    Strategy of record: <b>skew_consensus_v22_novix</b> &nbsp;·&nbsp; canonical verdict <b>+19.15 bps / z 7.53</b> on PRIMARY (≥2018, 341,506 fires); pre-2018 OOS confirms · full panel ~454,798 fires, 2013–2026, survivorship-free<br/><br/>
     Prepared May 2026 &nbsp;·&nbsp; branch <span class="mono">claude/funny-elbakyan-1e8456</span><br/>
     <b>Confidential working document</b>
   </div>
@@ -111,12 +111,12 @@ li { margin: 2pt 0; font-size: 9.3pt; }
 <li><b>Can we make it better without fooling ourselves?</b> — a two-agent optimisation layer (agents 11–12) that searches the tunable surface under hard anti-overfitting governors.</li>
 <li><b>Will it survive contact with a real broker?</b> — an enforced paper-trading loop (Phase 4) on a live options-data feed, with a live transition (Phase 5) gated on an accrued track record.</li>
 </ol>
-<div class="box"><b>Executive summary.</b> A prose hypothesis is formalised, adversarially screened, coded into a signal, and back-tested against a date- and direction-matched random pool. It then passes deflated-Sharpe, correlation and concentration gates, a nine-criterion qualitative review, and a risk-and-sizing officer, before being recorded and rendered into a living report. The strategy of record — a skew/IV/risk-reversal <i>fade</i> on US equities — clears every gate (21-day selection increment <b>+18.15&nbsp;bps</b>, <b>z&nbsp;8.87</b>), sizes to a <b>1.12 Sharpe / −9.86% max drawdown</b> book, and is deployed at <b>0.5×</b> to enforced Alpaca paper trading. The optimisation layer searched 18 variants and — correctly — promoted none: the deflated probability-of-real fell to <b>0.874&nbsp;&lt;&nbsp;0.95</b> at 30 cumulative trials, so the guardrails refused to ship an overfit. The edge is real, robust, and economically modest, with one known regime weakness (a sharp V-recovery runs over the fade).</div>
+<div class="box"><b>Executive summary.</b> A prose hypothesis is formalised, adversarially screened, coded into a signal, and back-tested against a date- and direction-matched random pool. It then passes deflated-Sharpe, correlation and concentration gates, a nine-criterion qualitative review, and a risk-and-sizing officer, before being recorded and rendered into a living report. The strategy of record — a skew/IV/risk-reversal <i>fade</i> on US equities — clears every gate (canonical 21-day selection increment on PRIMARY ≥2018 <b>+19.15&nbsp;bps</b>, <b>z&nbsp;7.53</b>, 341,506 fires; the held-out pre-2018 OOS confirms at <b>+15.27&nbsp;bps</b>, <b>z&nbsp;4.58</b>; the all-data reference and sizing basis is +18.15&nbsp;bps / z&nbsp;8.873 over 454,798 fires), sizes to a <b>1.12 Sharpe / −9.86% max drawdown</b> book, and is deployed at <b>0.5×</b> to enforced Alpaca paper trading. The optimisation layer (PRIMARY-search ≥2018) searched 18 variants and — correctly — promoted none: no guarded variant beat the v22+exits baseline, which itself now <b>clears</b> the multiple-testing bar (deflated probability-of-real <b>0.9885&nbsp;≥&nbsp;0.95</b>) at 30 cumulative trials — a local optimum, with the pre-2018 leak-guard confirming. The edge is real, robust, and economically modest, with one known regime weakness (a sharp V-recovery runs over the fade).</div>
 
 <table class="kpi">
 <tr><th>21d increment</th><th>21d gross</th><th>z-score</th><th>Sharpe (sized)</th><th>Max drawdown</th><th>Deploy size</th></tr>
-<tr><td class="v">+18.15 bps</td><td class="v">+106.96 bps</td><td class="v">8.87</td><td class="v">1.12</td><td class="v">−9.86%</td><td class="v">0.5×</td></tr>
-<tr><td class="small">vs random pool</td><td class="small">per 21d trade</td><td class="small">p &lt; 0.0005</td><td class="small">CAGR +5.82%</td><td class="small">every year +</td><td class="small">Risk Agent 4/10</td></tr>
+<tr><td class="v">+19.15 bps</td><td class="v">+114.3 bps</td><td class="v">7.53</td><td class="v">1.12</td><td class="v">−9.86%</td><td class="v">0.5×</td></tr>
+<tr><td class="small">PRIMARY ≥2018 · 341,506 fires</td><td class="small">per 21d trade</td><td class="small">OOS (pre-2018) confirms +15.27/z4.58</td><td class="small">CAGR +5.82% (full panel)</td><td class="small">every year +</td><td class="small">Risk Agent 4/10</td></tr>
 </table>
 
 <h2>2. The big picture — three operating regimes</h2>
@@ -140,7 +140,7 @@ li { margin: 2pt 0; font-size: 9.3pt; }
 <tr><td>Direction</td><td>BULL → −1 (short fade); BEAR → +1 (long fade)</td></tr>
 <tr><td>Hold / exit</td><td>21 trading days, with OOS-validated early exits (hard_stop 8% + Bollinger reversion band)</td></tr>
 <tr><td>Universe</td><td>Survivorship-free US equities (active + delisted); ~8,519 tickers in the clean panel</td></tr>
-<tr><td>Validation edge (21d)</td><td>+18.15 bps selection increment, +106.96 bps gross, z 8.87, p &lt; 0.0005, beat-rate 51.6%</td></tr>
+<tr><td>Validation edge (21d)</td><td><b>Canonical (PRIMARY ≥2018):</b> +19.15 bps increment, +114.3 gross, z 7.53, 341,506 fires. <b>OOS holdout (pre-2018):</b> +15.27 bps, z 4.58, 113,292 fires — CONFIRMS (same-sign). <b>All-data reference (sizing basis):</b> +18.15 bps, +106.96 gross, z 8.873, p &lt; 0.0005, beat-rate 51.6%, 454,798 fires.</td></tr>
 <tr><td>Sized book</td><td>Sharpe 1.12, CAGR +5.82%, max drawdown −9.86%, worst month 2020-02 −7.20%</td></tr>
 <tr><td>Known weakness</td><td>A sharp V-shaped recovery runs over the fade (e.g. the 2020 rebound)</td></tr>
 </table>
@@ -295,14 +295,16 @@ li { margin: 2pt 0; font-size: 9.3pt; }
 <div class="fig"><img src="report_assets/fig06_vsrandom.png"/></div>
 <div class="cap">Figure 6 — The date- and direction-matched random pool. The null is “a random name on the same day, traded the same direction”; the signal must beat that null.</div>
 <div class="fig"><img src="report_assets/chart04_verdict.png"/></div>
-<div class="cap">Chart 4 — The selection edge grows monotonically with horizon: +1.29 bps (5d) → +5.08 bps (10d) → +18.15 bps (21d), with z rising 1.21 → 3.54 → 8.87 (from the strategy’s <code>vs_random.json</code>).</div>
+<div class="cap">Chart 4 — The selection edge grows monotonically with horizon on the canonical PRIMARY window (≥2018): +1.04 bps (5d) → +4.49 bps (10d) → +19.15 bps (21d), with z rising 0.79 → 2.54 → 7.53 (from the strategy’s PRIMARY <code>vs_random.json</code>). The all-data reference (sizing basis) reads +1.29 → +5.08 → +18.15 bps, z 1.21 → 3.54 → 8.87.</div>
 <table>
-<tr><th>Horizon</th><th>n fires</th><th>Increment</th><th>Gross</th><th>Random</th><th>z</th><th>p</th><th>Beat-rate</th></tr>
-<tr><td>5-day</td><td>456,661</td><td>+1.29 bps</td><td>14.28</td><td>12.99</td><td>1.21</td><td>0.114</td><td>50.99%</td></tr>
-<tr><td>10-day</td><td>456,494</td><td>+5.08 bps</td><td>31.39</td><td>26.30</td><td>3.54</td><td>&lt;0.0005</td><td>51.30%</td></tr>
-<tr><td><b>21-day</b></td><td><b>454,798</b></td><td><b>+18.15 bps</b></td><td><b>106.96</b></td><td><b>88.82</b></td><td><b>8.87</b></td><td><b>&lt;0.0005</b></td><td><b>51.61%</b></td></tr>
+<tr><th>Window</th><th>Horizon</th><th>n fires</th><th>Increment</th><th>Gross</th><th>z</th><th>Verdict</th></tr>
+<tr><td rowspan="3"><b>PRIMARY ≥2018<br/>(canonical verdict)</b></td><td>5-day</td><td>—</td><td>+1.04 bps</td><td>—</td><td>0.79</td><td>weak</td></tr>
+<tr><td>10-day</td><td>—</td><td>+4.49 bps</td><td>—</td><td>2.54</td><td>significant</td></tr>
+<tr><td><b>21-day</b></td><td><b>341,506</b></td><td><b>+19.15 bps</b></td><td><b>114.3</b></td><td><b>7.53</b></td><td><b>CANONICAL ✓</b></td></tr>
+<tr><td><b>OOS holdout pre-2018<br/>(held out)</b></td><td><b>21-day</b></td><td><b>113,292</b></td><td><b>+15.27 bps</b></td><td><b>84.85</b></td><td><b>4.58</b></td><td><b>CONFIRMS (same-sign) ✓</b></td></tr>
+<tr><td>All-data reference<br/>(full window — sizing basis)</td><td>21-day</td><td>454,798</td><td>+18.15 bps</td><td>106.96</td><td>8.873</td><td>reference</td></tr>
 </table>
-<p class="small">Tier-A actual Sharpe 0.98, at the 99th percentile vs the random pool. The 5-day horizon is honestly weak (p 0.11) — the edge is a 10–21 day reversion, which is exactly why the hold is 21 days.</p>
+<p class="small">VERDICT window = PRIMARY (≥2018); SIZING window = full-panel — a deliberate, verdict-only split. Tier-A actual Sharpe 0.98, at the 99th percentile vs the random pool. The recent-regime edge is modestly weaker (z ~7.53) than over all data (z ~8.87), yet the deployed book is sharper on the recent regime because the OOS-validated exits compress the 2020/2021 tail months. The 5-day horizon is honestly weak — the edge is a 10–21 day reversion, which is exactly why the hold is 21 days.</p>
 
 <h2>14. Agent 5 — Statistics &amp; the Deflated Sharpe</h2>
 <p><code>quant_validator/stats.py</code> computes the performance metrics and — critically — the multiple-testing-aware <b>Deflated Sharpe Ratio</b> (Bailey &amp; López de Prado).</p>
@@ -363,7 +365,7 @@ li { margin: 2pt 0; font-size: 9.3pt; }
 
 <h2>19. Agent 10 — Memory &amp; Reporter</h2>
 <p><b>Memory</b> (<code>quant_validator/memory.py</code>) is an append-only SQLite store. The <code>trials</code> table records every accept/reject with the honest DSR trial count at the time (<code>n_trials_at_time</code>), the metrics, and an <code>override_log_json</code>; a <code>trial_greeks</code> side table tracks net delta/gamma/vega for portfolio-level Greek aggregation. <code>deployment_status ∈ {archived(default), paper, live, retired}</code>; <code>n_trials()</code> = <code>COUNT(*)</code> feeds the Deflated Sharpe, and retired predecessors are excluded from the correlation gate so a successor isn’t blocked by the version it replaces. Overrides are never lost (a placeholder row is inserted if needed).</p>
-<p><b>Reporter</b> (the <code>report-rendering</code> Skill, stage 10) maintains <b>one living, self-contained HTML report per strategy</b>: a canonical <code>report.json</code> (each stage writes only its own slice — append-and-update, never wipe) and a <code>report.html</code> that is a pure function of it, with charts baked as <b>inline SVG</b> (no CDN/JS, prints to PDF). Sections render in order: stages 1–10, a robustness block (cost-survival, temporal, regime), a phases block (Phase-4 paper / Phase-5 live with the owned-positions table, the ranked exit options, and the next-open trade queue), and a Mutations section. On a full re-run the version bumps and the prior HTML is snapshotted.</p>
+<p><b>Reporter</b> (the <code>report-rendering</code> Skill, stage 10) maintains <b>one living, self-contained HTML report per strategy</b>: a canonical <code>report.json</code> (each stage writes only its own slice — append-and-update, never wipe) and a <code>report.html</code> that is a pure function of it, with charts baked as <b>inline SVG</b> (no CDN/JS, prints to PDF). Sections render in order: stages 1–10 (stage 6 leads the PRIMARY ≥2018 canonical verdict, then a labelled all-data reference / sizing basis, then the pre-2018 OOS-holdout confirmation), a robustness block (cost-survival, temporal, regime), a phases block (Phase-4 paper / Phase-5 live with the owned-positions table, the ranked exit options, and the next-open trade queue), and a Mutations section. On a full re-run the version bumps and the prior HTML is snapshotted.</p>
 
 <!-- ===================== PART IV ===================== -->
 <h1>Part IV — The optimisation layer</h1>
@@ -381,10 +383,10 @@ li { margin: 2pt 0; font-size: 9.3pt; }
 </table>
 <p><b>Promotion is hard.</b> A variant must beat the baseline Sharpe on a <b>majority</b> of folds, keep <code>pooled maxDD ≥ −0.25</code>, retain <b>≥ 50%</b> of the baseline mean edge, and beat the pooled Sharpe — <i>and then</i> survive the multiple-testing penalty. The Deflated-Sharpe trial count is <b>cumulative</b>: <code>n_trials = 12 (the Exit Agent’s prior candidates) + 18 (this run) = 30</code>, so every variable tried inflates the bar for the best one.</p>
 <div class="fig"><img src="report_assets/chart06_mutation.png"/></div>
-<div class="cap">Chart 6 — Walk-forward Sharpe of all 18 variants vs the baseline (red line, 1.036). Several beat raw Sharpe — <code>exit_hardstop_5_tight</code> 1.229, <code>entry_corner_80_20</code> 1.124 — but none cleared the joint promotion + multiple-testing bar.</div>
+<div class="cap">Chart 6 — Walk-forward Sharpe of all 18 variants vs the baseline (red line, 1.437) on the PRIMARY (≥2018) regime. Several beat raw Sharpe — <code>exit_hardstop_5_tight</code> 1.677, <code>entry_corner_80_20</code> 1.565 — but none beat the baseline on a majority of folds, so none was promoted.</div>
 <div class="fig"><img src="report_assets/chart07_mtbar.png"/></div>
-<div class="cap">Chart 7 — The decisive test. At 30 cumulative trials the best variant’s deflated probability-of-real is 0.874, below the 0.95 bar. The optimiser correctly promoted <b>nothing</b>.</div>
-<div class="box good"><b>Result: NO VALIDATED IMPROVEMENT — and that is a success.</b> 18 candidates, 30 cumulative trials, runtime 88s. Best variant = the baseline (v22 + 6b exits): Sharpe 1.036, maxDD −5.25%. The expected maximum Sharpe under the null at 30 trials is 0.036; the best annualised Sharpe was 0.891 → deflated prob-real 0.874 &lt; 0.95. The guardrails refused to ship an overfit; the strategy sits at a local optimum.</div>
+<div class="cap">Chart 7 — The multiple-testing test. At 30 cumulative trials the baseline’s deflated probability-of-real is 0.9885, above the 0.95 bar — it CLEARS the penalty on the PRIMARY (≥2018) regime. Nothing is promoted because no variant beat the baseline (a local optimum).</div>
+<div class="box good"><b>Result: NO VALIDATED IMPROVEMENT — and that is a success.</b> 18 candidates, 30 cumulative trials, on the PRIMARY (≥2018) regime. Best variant = the baseline (v22 + 6b exits): Sharpe 1.437, maxDD −5.25%. The baseline’s annualised Sharpe (1.4285) gives a deflated prob-real of 0.9885 ≥ 0.95 — it <b>clears</b> the multiple-testing bar; no guarded variant beat it on the fold majority, so nothing was promoted (a local optimum). The pre-2018 leak-guard CONFIRMS (+21.5 bps, 7,722 sampled fires — distinct from the full-universe +15.27 OOS verdict).</div>
 
 <h2>21. Agent 12 — Exit (technical-analysis exits)</h2>
 <p><code>quant_validator/exit_agent.py</code> replaces “always ride to day 21” with finding the exit that captures the most profit before the fade reverts. It has three parts: a sign-aware rule library, an out-of-sample walk-forward selection, and a run-time ranker.</p>
@@ -446,7 +448,7 @@ li { margin: 2pt 0; font-size: 9.3pt; }
 <tr><td>5 — Parity-locked</td><td>Time-backstop path reproduces close-to-close to &lt; 1e-9; live <code>_simulate</code> == backtest, rule-for-rule</td><td>“The live engine differs from the test.”</td><td><code>parity_gate</code>, <code>exit_parity_check</code></td></tr>
 <tr><td>6 — Live OPG</td><td>Market-on-open fills, shortability gate, idempotent orders, staleness guard</td><td>“It can’t actually be traded.”</td><td><code>fills.py</code> (Alpaca)</td></tr>
 </table>
-<p>The default <code>entry_mode = "signal_close"</code> keeps rungs 1–5 on the exact close-to-close basis the verdict was validated on; switching to <code>"next_open"</code> moves to the live OPG basis on purpose. Because each rung is parity-checked against the previous one, the +18.15 bps / z 8.87 selection verdict and the 1.12-Sharpe sized book are the <i>same</i> result viewed at increasing realism — not three different backtests.</p>
+<p>The default <code>entry_mode = "signal_close"</code> keeps rungs 1–5 on the exact close-to-close basis the verdict was validated on; switching to <code>"next_open"</code> moves to the live OPG basis on purpose. Because each rung is parity-checked against the previous one, the canonical +19.15 bps / z 7.53 selection verdict (PRIMARY ≥2018; the all-data reference reads +18.15 bps / z 8.873 and is the sizing basis) and the 1.12-Sharpe sized book are the <i>same</i> result viewed at increasing realism — not three different backtests.</p>
 
 <!-- ===================== PART VI ===================== -->
 <h1>Part VI — From idea to live</h1>
@@ -457,7 +459,7 @@ li { margin: 2pt 0; font-size: 9.3pt; }
 <tr><td>ORATS surface</td><td>Full-universe by-date backfill (~5,805 tickers/day); the six signal features recomputed bit-identical to the reference tool (252-day rolling percentiles; sigma = 5-day move / 20-day vol)</td></tr>
 <tr><td>Survivorship</td><td>AV <code>LISTING_STATUS</code> builds an active + delisted master; <code>symbol_map</code> resolves ORATS→AV (exact then punctuation-normalised; unmatched never silently dropped)</td></tr>
 <tr><td>Path bars</td><td>AV <code>TIME_SERIES_DAILY_ADJUSTED</code> (premium) → split/dividend-adjusted OHLC, the path engine’s input</td></tr>
-<tr><td>Clean panel</td><td><code>signal_panel_clean.parquet</code> — merged signal × adjusted OHLC, ~8,519 tickers, pre-computed forward returns; 454,798 fires, 2013–2026</td></tr>
+<tr><td>Clean panel</td><td><code>signal_panel_clean.parquet</code> — merged signal × adjusted OHLC, ~8,519 tickers, pre-computed forward returns; 454,798 fires over the full panel, 2013–2026 (of which 341,506 are in the PRIMARY ≥2018 verdict window; 113,292 in the pre-2018 OOS holdout)</td></tr>
 <tr><td>Warm-up</td><td><code>WARMUP_BDAYS = 756</code> (3yr ORATS), <code>WARMUP_START = 2013-11-26</code> — every percentile/sigma window is fully warmed</td></tr>
 <tr><td>Live feed</td><td><code>run_live</code> backfills the gap, rebuilds the trailing-756 panel, fires the latest session (~150–250/day), and flips <code>is_live_orats</code> — it verifies, it does not trade</td></tr>
 </table>
@@ -488,9 +490,9 @@ li { margin: 2pt 0; font-size: 9.3pt; }
 <li><b>Refine (1).</b> The Hypothesis-Refiner formalises it: <code>market_type = equities</code> (it trades the stock), <code>mode = single</code>, holding 21 bars, with a mandatory <code>works_in_regime</code> / <code>breaks_in_regime</code> pair and three named failure modes.</li>
 <li><b>Screen (2).</b> The Pre-Critic routes to the OPTIONS template and runs its eight checks (look-ahead, short-vol tails, costs, illiquidity, event windows…). Survivable concerns become <code>warning_flags</code>; a fatal flaw would kill it here.</li>
 <li><b>Code &amp; gate (3→4).</b> The Coder writes the fires-frame <code>strategy()</code>; the fire-parity gate confirms it reproduces <code>compute_consensus</code> on AAPL/MSFT/XOM/JPM with 0 disagreements, then the Backtest applies the eligibility screen once and scores it.</li>
-<li><b>Prove the edge (5→8).</b> Statistics report a Deflated-Sharpe p of 0.006 (prob-real 0.994); the Vs-Random gate confirms +18.15 bps / z 8.87 at 21 days; the Validator’s nine criteria pass; the Gatekeeper’s DSR / correlation / PCA / vs-random gates all clear.</li>
+<li><b>Prove the edge (5→8).</b> Statistics report a Deflated-Sharpe p of 0.006 (prob-real 0.994); the Vs-Random gate confirms the canonical PRIMARY (≥2018) edge of +19.15 bps / z 7.53 at 21 days, with the held-out pre-2018 OOS confirming (+15.27 bps / z 4.58) and the all-data reference (sizing basis) at +18.15 bps / z 8.873; the Validator’s nine criteria pass; the Gatekeeper’s DSR / correlation / PCA / vs-random gates all clear.</li>
 <li><b>Size &amp; record (9→10).</b> The Risk agent scores 4/10 and recommends 0.5×; the sizing engine produces a Sharpe-1.12 / −9.86%-drawdown book; Memory logs the trial and the Reporter renders the living HTML report.</li>
-<li><b>Optimise (11→12).</b> The Mutation Agent searches 18 variants under the drawdown + multiple-testing governors and promotes none (0.874 &lt; 0.95); the Exit Agent validates <code>hard_stop_8 + boll_reversion_band</code> out-of-sample and they are banked for risk control.</li>
+<li><b>Optimise (11→12).</b> The Mutation Agent (PRIMARY-search ≥2018) searches 18 variants under the drawdown + multiple-testing governors and promotes none — no variant beats the baseline, which itself clears the bar (prob-real 0.9885); the pre-2018 leak-guard confirms. The Exit Agent validates <code>hard_stop_8 + boll_reversion_band</code> out-of-sample and they are banked for risk control.</li>
 <li><b>Paper (4) &amp; live (5).</b> The strategy deploys at 0.5× in DRY-RUN; each day the live ORATS feed → manage loop (enforced exits + kill-switch) → sized, shortability-gated queue → first-day review gate. An explicit, graduated <code>--submit</code> begins real paper fills; Phase 5 (live broker) is the same code, gated on the accrued paper track record.</li>
 </ol>
 
@@ -507,7 +509,7 @@ li { margin: 2pt 0; font-size: 9.3pt; }
 <div class="cap">Chart 5 — 21-day selection increment by year. The edge is positive in most years; 2016–2017 are honestly flagged (21-day p &gt; 0.05) — the system reports its weak years rather than hiding them.</div>
 <div class="fig"><img src="report_assets/chart09_squeeze.png"/></div>
 <div class="cap">Chart 9 — The 2021-01 meme-squeeze, the worst case. The raw fade was run over; <code>hard_stop_8</code> turns the month around (+516 bps vs no stop) and 0.5× sizing brings the booked month to −0.88%.</div>
-<div class="box"><b>The honest read.</b> The edge is real and robust — it beats a date- and direction-matched random pool by 18 bps over 21 days with z 8.87 across ~455k fires and 13 years, survives a multiple-testing-aware Deflated Sharpe, and holds across most regimes — but it is <b>economically modest</b> (a ~1.1 Sharpe) with one known weakness: a sharp V-shaped recovery runs over the fade (2020). That weakness is exactly why the optimisation layer is constrained rather than free-running, and why the next milestone is a paper track record before any leverage increase or live transition.</div>
+<div class="box"><b>The honest read.</b> The edge is real and robust — on the canonical PRIMARY window (≥2018) it beats a date- and direction-matched random pool by +19.15 bps over 21 days with z 7.53 (341,506 fires), the held-out pre-2018 OOS confirms it (+15.27 bps, z 4.58, same-sign), and over the full 13-year panel — the sizing basis — it reads +18.15 bps with z 8.873 across ~455k fires, survives a multiple-testing-aware Deflated Sharpe, and holds across most regimes — but it is <b>economically modest</b> (a ~1.1 Sharpe) with one known weakness: a sharp V-shaped recovery runs over the fade (2020). That weakness is exactly why the optimisation layer is constrained rather than free-running, and why the next milestone is a paper track record before any leverage increase or live transition.</div>
 
 <h2 class="np">27b. Limitations, failure modes &amp; roadmap</h2>
 <p>An honest system documents where it is weak. These are stated plainly so they are managed, not discovered.</p>
@@ -594,6 +596,6 @@ li { margin: 2pt 0; font-size: 9.3pt; }
 <tr><td>cross-cutting</td><td><code>audit_log.jsonl</code>, <code>user_interactions.jsonl</code>, optimisation <code>reports/{mutation_agent,exit_agent_selection}.json</code></td></tr>
 </table>
 
-<p style="margin-top:18pt; text-align:center; color:#455a72; font-style:italic; font-size:9pt; page-break-before:avoid;">— End of report —<br/>Confidential working document · Skew-Consensus Validation System · Extended Companion to Project Record v2.2 · May 2026.<br/>Every numeric value above is sourced from the codebase on branch <span class="mono">claude/funny-elbakyan-1e8456</span>.</p>
+<p style="margin-top:18pt; text-align:center; color:#455a72; font-style:italic; font-size:9pt; page-break-before:avoid;">— End of report —<br/>Confidential working document · Skew-Consensus Validation System · Extended Companion to Project Record v2.3 · May 2026.<br/>Every numeric value above is sourced from the codebase on branch <span class="mono">claude/funny-elbakyan-1e8456</span>.</p>
 
 </body></html>
