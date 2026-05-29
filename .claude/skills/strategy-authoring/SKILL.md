@@ -93,8 +93,25 @@ propose — **do not** let a spec's `warm_up_buffer` override it downward.
   historical fires are constructed identically (`fills.LIVE_SIGNAL_WARMUP_BDAYS`).
 - Moving the warm-up later drops the earliest fires (≈2012 + most of 2013, ~4–5% of fires for
   the skew consensus). The verdict must stay materially unchanged — those early fires sat near
-  the pooled average, so the 21d increment holds (~+18.3 bps / gross +106.5). If it moves a lot,
+  the pooled average, so the 21d increment holds on every window (CANONICAL PRIMARY ≥2018 ~+19.15 bps /
+  gross +114.3 / z 7.53; full-panel sizing basis ~+18.15 bps / gross +106.96; pre-2018 OOS ~+15.27 bps,
+  same-sign). If it moves a lot,
   the early years were carrying the edge and that is a finding, not a warm-up tweak.
+
+### verdict windows — the PRIMARY / pre-cutoff-OOS split (PROJECT CONVENTION, every strategy)
+
+Every strategy is scored on a deliberate verdict-only split via `quant_validator.backtest run-split`:
+- **PRIMARY = tradeDate ≥ `SPLIT_CUTOFF`** (the module constant in `quant_validator/backtest.py`,
+  currently 2018-01-01) — the CANONICAL verdict that drives the gate stack (VsRandom, DSR, gates).
+- **full panel = all data** (warm-up floor → present) — the SIZING basis (Kelly/drawdown) and the DSR
+  basis ONLY, never the verdict; reported as the "all-data reference".
+- **pre-cutoff OOS (warm-up floor → `OOS_END`)** — a HELD-OUT leak-guard: never read while
+  fitting/searching, touched once per promotion candidate to CONFIRM same-sign.
+
+The 2018-01-01 boundary is the documented default for ALL theses, not a skew special case (it isolates
+the modern options regime). A spec may move the `oos_holdout` boundary but may NOT collapse the split
+to a single full-window verdict. Mirrors the Mutation Agent's holdout discipline + report-rendering
+stage 6.
 
 ### forward returns
 Compute close-to-close, on a **trading-day** offset **within each symbol's own sorted
@@ -164,8 +181,12 @@ code must be checked against it — functional equivalence, not byte-identity.
 - **Reproduce a known anchor** before trusting anything (the panel-specific binding anchor
   above; an AAPL self-check such as 2015-08-05 -> 98.8 / 78.97 / 1.6 / 5.6).
 - **Check the verdict, not just the code.** If the strategy has a known Mode B result,
-  the generated strategy's vs-random verdict must land on it (reference 21d: increment
-  +18.3 bps, gross +106.5, z 9.12). A code diff that "looks fine" but moves the verdict
+  the generated strategy's vs-random verdict must land on it. The verdict is scored PER WINDOW via
+  `backtest run-split`; the CANONICAL anchor is PRIMARY (tradeDate ≥ SPLIT_CUTOFF, currently
+  2018-01-01): 21d +19.15 bps, gross +114.3, z 7.53, 341,506 fires — this is what the gates read.
+  The pre-2018 OOS leak-guard must CONFIRM same-sign (+15.27 bps, z 4.58); the full-panel run
+  (+18.15 bps, gross +106.96, z 8.873) is the SIZING basis only, NOT the verdict. A code diff that
+  "looks fine" but moves the verdict
   is a real divergence.
 - **Validate by FUNCTIONAL EQUIVALENCE vs `compute_consensus`, not a CLI** — there is no
   `python -m quant_validator.sandbox validate` (it does not exist). Use
@@ -273,7 +294,7 @@ The ORATS adapter took four debug rounds for exactly these — design against th
 6. Price screen on `raw_close`; `max_abs_fwd` symmetric.
 7. No look-ahead; PIT-safe; survivorship-free universe.
 8. Code quarantined; reference module untouched.
-9. A known anchor reproduced; if a reference verdict exists, it matches.
+9. A known anchor reproduced; if a reference verdict exists, the CANONICAL PRIMARY (≥2018) verdict matches AND the pre-2018 OOS still confirms (same-sign).
 10. No regime/VIX alpha gate baked in; tail control left to the Risk Agent.
 11. Fires-frame is PRE-FILTER when matching a pre-filter reference: `earnings_blackout` /
     `short_trend` carried as flags (default `False`), applied downstream — never inside `strategy()`.

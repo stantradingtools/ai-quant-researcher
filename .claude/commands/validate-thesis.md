@@ -144,6 +144,14 @@ is NOT recomputed, so percentiles stay warm-up-correct):
 The fires-frame adapter is the only engine. Legacy single-window baseline (regression):
   python -m quant_validator.backtest run --thesis_id <thesis_id> --window full
 
+WINDOW CONVENTION (applies to STEPS 5-11, EVERY thesis — not skew-specific): VERDICT window =
+PRIMARY (tradeDate >= SPLIT_CUTOFF, the constant in quant_validator/backtest.py, currently
+2018-01-01) — the canonical verdict that drives every downstream gate (6 Stats / 6.5 VsRandom /
+7 Validator / 8 Gates / 9 Risk) and the living report. SIZING window = full-panel — used for
+Kelly/drawdown sizing and the DSR computation ONLY, NEVER the accept/reject verdict. pre-cutoff =
+held-out OOS leak-guard — a same-sign CONFIRMATION (oos_holdout), never the gate. A missing/empty
+PRIMARY is a hard backtest_error (non-overridable); the full-panel run never substitutes for it.
+
 CHECKPOINT (OOS holdout): read theses/<thesis_id>/results/oos_confirmation.json. If
 status=="not_available", treat as N/A. Else if NOT same_sign_as_primary OR NOT oos_significant,
 emit a SOFT warning (overridable as oos_holdout) — a CONFIRMATION, not a hard fail; the PRIMARY

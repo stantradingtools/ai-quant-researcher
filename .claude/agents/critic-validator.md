@@ -64,7 +64,9 @@ Walk these 9 criteria in order. For each, output one of:
    - Strategy that ignores ADV entirely on illiquid instruments = fatal
 
 7. Deflated Sharpe Ratio
-   - Read dsr_pvalue from results/dsr.json
+   - Read dsr_pvalue from results/dsr.json. NOTE: DSR is computed on the all-data / full-panel run
+     (the SIZING basis), NOT on the PRIMARY (>=2018) verdict window. The canonical selection verdict
+     is the PRIMARY vs-random increment in results/vs_random.json; state which window each figure is from.
    - pvalue < 0.95 = pass
    - 0.85 <= pvalue < 0.95 = warning (borderline)
    - pvalue >= 0.95 = fatal (subjectively overridable via /override-reject)
@@ -77,10 +79,12 @@ Walk these 9 criteria in order. For each, output one of:
    - Sharpe negative in any major regime = fatal
 
 9. Out-of-sample holdout
-   - Confirm a true holdout period exists beyond walk-forward OOS
-   - Walk-forward alone = warning
-   - True untouched holdout exists = pass
-   - No OOS at all = fatal
+   - Read theses/<id>/results/oos_confirmation.json. The run-split pre-2018 OOS holdout IS the true
+     untouched holdout (the search/sizing never read it).
+   - status==ok, same_sign_as_primary, confirms==true = pass
+   - status==not_available OR confirms==false = warning (the soft, overridable oos_holdout signal —
+     not fatal alone, since PRIMARY drives the gates)
+   - No run-split / no OOS artifact at all = fatal
 
 ═══════════════════════════════════════════════════════════════
 

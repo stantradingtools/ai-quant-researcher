@@ -81,7 +81,7 @@ Render a section per stage, in order, each with its status chip and `updated_at`
 3. **Code (Coder Agent)** — plain-English summary of the generated `strategy()`, its params, the quarantined path, and fire-level parity vs any reference.
 4. **Backtest** — headline run facts (n fires, span, universe).
 5. **Stats** — performance metrics.
-6. **VsRandom** — the verdict TABLE per horizon: increment, matched-random mean, gross/trade, z, p, beat-pool-median.
+6. **VsRandom** — lead with the CANONICAL verdict table = the **PRIMARY window** (tradeDate ≥ `SPLIT_CUTOFF`, currently 2018-01-01; the deployment regime that drives the gates): per horizon increment, matched-random mean, gross/trade, z, p, beat-pool-median. Directly below it render (a) a labelled **all-data reference (full window — the SIZING basis)** line and (b) an **OOS holdout (pre-cutoff, held out) — CONFIRMS / does-not-confirm** line. State under the table: VERDICT window = PRIMARY; SIZING window = full-panel (deliberate, verdict-only split). This three-tier layout is the DEFAULT for **every** strategy; `reporter.py` already renders it (`_verdict_table` + `all_data_ref` + `_oos_block`).
 7. **Validator** — the 9 criteria + the placebo result.
 8. **Gates** — DSR / correlation / PCA / vs_random pass/fail.
 9. **Risk & Sizing** — the size recommendation (fractional Kelly level, kill-switch thresholds, caps), the sized equity curve, and tail behavior (worst month, worst year, drawdown).
@@ -91,6 +91,21 @@ Plus a **Robustness** block (these are the gating analyses): cost-survival break
 horizon; temporal stability per year (flag inversions); regime diagnosis (the conditioner
 verdict). And a **Phases** block: Phase 4 paper-trade tracking (equity, fills, kill-switch
 state) and Phase 5 live — `not_started` until they exist.
+
+### Window-split verdict (standing convention — ALL strategies)
+
+Stage 6 ALWAYS uses a deliberate verdict/sizing window split, the project default for every strategy
+(not skew-specific): **VERDICT window = PRIMARY** (tradeDate ≥ `SPLIT_CUTOFF`, the module constant in
+`quant_validator/backtest.py`, currently 2018-01-01) — the deployment-regime verdict that drives the
+gate stack; **SIZING window = full panel** (warm-up floor → present) — the all-data reference used for
+Kelly/drawdown sizing and the DSR, never the verdict; **pre-cutoff = held-out leak-guard** — a
+same-sign CONFIRMATION, never a gate. The backtest scores both via `backtest run-split`; the Reporter
+renders them in that order (PRIMARY → all-data reference → pre-cutoff OOS confirms) and prints
+"VERDICT window = PRIMARY; SIZING window = full-panel". The `6_vs_random` report.json slice carries
+`verdict` (PRIMARY per-horizon), `all_data_ref` (`increment_21d`, `z`, `n`, `gross`), and `oos`
+(`oos_increment_21d`, `oos_z`, `oos_n_fires`, `realized_oos_start`, `same_sign_as_primary`, `confirms`).
+Two distinct pre-cutoff numbers must never be merged: the **full-universe OOS verdict** (stage 6) and
+the **Mutation sampled leak-guard** (a 600-ticker walk-forward, shown only in the Mutations section).
 
 ## Rendering conventions
 
@@ -138,8 +153,9 @@ decision record (small, text). They belong in version control, like the memory l
 ## Worked example — skew-consensus (current state)
 
 Given what exists, the report would show: Hypothesis (done), Pre-Critic (pass), Code
-(pending — Mode A not yet run), VsRandom (pass: 21d increment +18.3 bps, gross +106.5, z 9.12,
-beat-median 51.6%), Robustness/cost (breakeven 21d 106.5 / 10d 33.3 / 5d 15.0 bps — 5d dies),
+(pending — Mode A not yet run), VsRandom (pass; window split — CANONICAL PRIMARY ≥2018: 21d +19.15 bps, gross +114.3, z 7.53,
+341,506 fires; all-data reference / sizing basis +18.15 bps, z 8.873, 454,798 fires; pre-2018 OOS
+holdout CONFIRMS +15.27 bps, z 4.58, 113,292 fires, same-sign), Robustness/cost (breakeven 21d 106.5 / 10d 33.3 / 5d 15.0 bps — 5d dies),
 Robustness/temporal (per-year bars; 2020 flagged, -41.9 bps inversion), Robustness/regime
 (verdict: accept + kill-switch, no gate), Risk & Sizing (pending), Phases (not_started).
 Overall status chip: "validated - sizing pending."
